@@ -64,15 +64,16 @@ sub delete_server {
     return $res->is_success;
 }
 
-# ABSTRACT: A Dancer plugin for talking to Stomp message brokers.
+# ABSTRACT: Bindings for the OpenStack compute api.
 
 =head1 SYNOPSIS
 
-Bindings for the OpenStack compute api.
-
-
     use Net::OpenStack::Compute;
-
+    my $compute = Net::OpenStack::Compute->new(
+        base_url => 'http://...',
+        token    => 'secret',
+    );
+    $compute->get_servers();
 
 =head1 METHODS
 
