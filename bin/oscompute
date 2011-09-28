@@ -1,0 +1,63 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+use App::Rad;
+use JSON qw(from_json to_json);
+use LWP;
+use Net::OpenStack::Compute;
+
+sub setup {
+    my $c = shift;
+
+    $c->register_commands({
+        get_server  => 'show server with the given id',
+        get_servers => 'list all servers',
+        create_server =>
+            'create a server with the given name, flavor and image',
+        delete_server => 'delete server with the given id',
+    });
+
+    my $nova_url = $ENV{NOVA_URL};
+    die "NOVA_URL env var is missing. Did you forget to source novarc?\n"
+        unless $nova_url;
+
+    # Save the auth token
+    my $agent = LWP::UserAgent->new();
+    my $res = $agent->get($nova_url,
+        'x-auth-key'  => $ENV{NOVA_API_KEY},
+        'x-auth-user' => $ENV{NOVA_USERNAME},
+    );
+    die $res->content unless $res->is_success;
+
+    $c->stash->{compute} = Net::OpenStack::Compute->new(
+        base_url => $res->header('x-server-management-url'),
+        token    => $res->header('x-auth-token'),
+    );
+}
+
+App::Rad->run();
+
+sub get_servers {
+    my $c = shift;
+    return $c->stash->{compute}->get_servers();
+}
+
+sub get_server {
+    my $c = shift;
+    return $c->stash->{compute}->get_server(@ARGV);
+}
+
+sub create_server {
+    my $c = shift;
+    my ($name, $flavor, $image) = @ARGV;
+    return $c->stash->{compute}->create_server(
+        name => $name, flavor => $flavor, image => $image);
+}
+
+sub delete_server {
+    my $c = shift;
+    my ($id) = @ARGV;
+    $c->stash->{compute}->delete_server($id);
+    return "deleted server $id";
+}
+
