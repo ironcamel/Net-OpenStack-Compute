@@ -29,33 +29,18 @@ sub setup {
 
 App::Rad->run();
 
-use Data::Dump;
 sub server {
     my $c = shift;
     $c->getopt('verbose|v', 'delete|d=s');
     my $compute = $c->stash->{compute};
-    given ($c->argv) {
-        when ([]) {
-            my $json = $compute->get_servers(detail => 1);
-            my $data = from_json($json);
-            if ($c->options->{delete}) {
-                my $id = $c->options->{delete};
-                $compute->delete_server($id);
-                return "Deleting server $id";
-            } elsif ($c->options->{verbose}) {
-                return to_json($data, {pretty => 1});
-            } else {
-                return join "\n",
-                    map {
-                        sprintf "%s\t%s\t%s\t%s",
-                            @$_{qw(id name status)}, _get_ip($_)
-                    } @{$data->{servers}};
-            }
+    my @args = @{$c->argv};
+    given ($args[0]) {
+        when (undef) {
+            return _get_servers($c);
         }
-        when ($_->[0] eq 'show') {
-            die "server show command requires an `id` argument" unless $_->[1];
-            my $json = $compute->get_server($_->[1]);
-            my $data = from_json($json);
+        when ('show') {
+            return _get_servers($c) if @args == 1;
+            my $data = from_json($compute->get_server($args[1]));
             if ($c->options->{verbose}) {
                 return to_json($data, {pretty => 1});
             } else {
@@ -65,15 +50,35 @@ sub server {
                     @$s{qw(id name status)}, _get_ip($s);
             }
         }
-        when ($_->[0] eq 'add') {
-            my ($cmd, $name, $flavor, $image) = @$_;
+        when ('add') {
+            die "Usage: oscompute server add `name` `flavor` `image`\n"
+                unless @args == 4;
+            my ($cmd, $name, $flavor, $image) = @args;
             return $compute->create_server(
                 name => $name, flavor => $flavor, image => $image);
+        }
+        when ('delete') {
+            die "Usage: oscompute server delete `id`\n" unless @args == 2;
+            my ($cmd, $id) = @args;
+            $compute->delete_server($id);
+            return "Server $id has been marked for deletion";
         }
         default {
             return "Supported server commands are show, add, and --delete";
         }
     }
+}
+
+sub _get_servers {
+    my $c = shift;
+    my $compute = $c->stash->{compute};
+    my $data = from_json($compute->get_servers(detail => 1));
+    if ($c->options->{verbose}) {
+        return to_json($data, {pretty => 1});
+    }
+    return join "\n",
+        map { sprintf "%s\t%s\t%s\t%s", @$_{qw(id name status)}, _get_ip($_) }
+            @{$data->{servers}};
 }
 
 sub _get_ip {
@@ -84,3 +89,41 @@ sub _get_ip {
     return 'IP-MISSING';
 }
 
+# PODNAME: oscompute
+
+=head1 SYNOPSIS
+
+
+    Usage: oscompute command [arguments]
+
+    Available Commands:
+        help        show syntax and available commands
+        server      server [--verbose|-v] [show `uuid`] [--delete|-d `uuid`]
+                           [add `name` `flavor` `image`]
+
+    Examples:
+
+    # Lists all servers.
+    oscompute server
+
+    # Also, lists all servers.
+    oscompute server show
+
+    # Show all details.
+    oscompute server -v show
+
+    # Show one server.
+    oscompute server show ec05b52e-f575-469c-a91e-7f0ddd4fab95
+
+    # Create a new server.
+    # Order of arguments are server add `name` `flavor` `image`
+    oscompute server add bob 1 11b2a5bf-590c-4dd4-931f-a65751a4db0e
+
+    # Delete a server.
+    oscompute server delete ec05b52e-f575-469c-a91e-7f0ddd4fab95
+
+=head1 DESCRIPTION
+
+This is a command line tool for interacting with the OpenStack Compute API.
+
+=cut

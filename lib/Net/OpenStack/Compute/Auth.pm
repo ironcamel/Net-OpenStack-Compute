@@ -91,12 +91,26 @@ sub auth_keystone {
     return { base_url => $base_url, token => $token };
 }
 
-# ABSTRACT: Steroids for your perl one-liners.
+=head1 SYNOPSIS
+
+    use Net::OpenStack::Compute::Auth;
+
+    my $auth = Net::OpenStack::Compute::Auth->new(
+        auth_url   => $auth_url,
+        user       => $user,
+        password   => $key,
+        project_id => $project_id, # Optional
+        region     => $region,     # Optional
+    );
+
+    my $token = $auth->token;
+    my $base_url = $auth->base_url;
 
 =head1 DESCRIPTION
 
-This module contains helper methods used by stackattack.
-You probably want to look at the documentation for L<stackattack> instead.
+This class is responsible for authenticating for OpenStack.
+It supports the old style auth and the new
+L<Keystone|https://github.com/openstack/keystone> auth.
 
 =cut
 

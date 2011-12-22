@@ -129,4 +129,4 @@ sub delete_server {
 
 =cut
 
-'Net::OpenStack::Compute';
+1;
