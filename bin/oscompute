@@ -1,6 +1,7 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
+use v5.10;
 use App::Rad;
 use JSON qw(from_json to_json);
 use LWP;
@@ -10,54 +11,76 @@ sub setup {
     my $c = shift;
 
     $c->register_commands({
-        get_server  => 'show server with the given id',
-        get_servers => 'list all servers',
-        create_server =>
-            'create a server with the given name, flavor and image',
-        delete_server => 'delete server with the given id',
+        server  => 'server [--verbose|-v] [show `uuid`] [add `name` `flavor` `image`] [--delete|-d `uuid`]',
     });
 
     my $nova_url = $ENV{NOVA_URL};
     die "NOVA_URL env var is missing. Did you forget to source novarc?\n"
         unless $nova_url;
 
-    # Save the auth token
-    my $agent = LWP::UserAgent->new();
-    my $res = $agent->get($nova_url,
-        'x-auth-key'  => $ENV{NOVA_API_KEY},
-        'x-auth-user' => $ENV{NOVA_USERNAME},
-    );
-    die $res->content unless $res->is_success;
-
     $c->stash->{compute} = Net::OpenStack::Compute->new(
-        base_url => $res->header('x-server-management-url'),
-        token    => $res->header('x-auth-token'),
+        auth_url   => $nova_url,
+        user       => $ENV{NOVA_USERNAME},
+        key        => $ENV{NOVA_API_KEY},
+        project_id => $ENV{NOVA_PROJECT_ID},
+        region     => $ENV{NOVA_REGION_NAME},
     );
 }
 
 App::Rad->run();
 
-sub get_servers {
+use Data::Dump;
+sub server {
     my $c = shift;
-    return $c->stash->{compute}->get_servers();
+    $c->getopt('verbose|v', 'delete|d=s');
+    my $compute = $c->stash->{compute};
+    given ($c->argv) {
+        when ([]) {
+            my $json = $compute->get_servers(detail => 1);
+            my $data = from_json($json);
+            if ($c->options->{delete}) {
+                my $id = $c->options->{delete};
+                $compute->delete_server($id);
+                return "Deleting server $id";
+            } elsif ($c->options->{verbose}) {
+                return to_json($data, {pretty => 1});
+            } else {
+                return join "\n",
+                    map {
+                        sprintf "%s\t%s\t%s\t%s",
+                            @$_{qw(id name status)}, _get_ip($_)
+                    } @{$data->{servers}};
+            }
+        }
+        when ($_->[0] eq 'show') {
+            die "server show command requires an `id` argument" unless $_->[1];
+            my $json = $compute->get_server($_->[1]);
+            my $data = from_json($json);
+            if ($c->options->{verbose}) {
+                return to_json($data, {pretty => 1});
+            } else {
+                my $s = $data->{server};
+                return 'No such server' unless $s;
+                return sprintf "%s\t%s\t%s\t%s",
+                    @$s{qw(id name status)}, _get_ip($s);
+            }
+        }
+        when ($_->[0] eq 'add') {
+            my ($cmd, $name, $flavor, $image) = @$_;
+            return $compute->create_server(
+                name => $name, flavor => $flavor, image => $image);
+        }
+        default {
+            return "Supported server commands are show, add, and --delete";
+        }
+    }
 }
 
-sub get_server {
-    my $c = shift;
-    return $c->stash->{compute}->get_server(@ARGV);
-}
-
-sub create_server {
-    my $c = shift;
-    my ($name, $flavor, $image) = @ARGV;
-    return $c->stash->{compute}->create_server(
-        name => $name, flavor => $flavor, image => $image);
-}
-
-sub delete_server {
-    my $c = shift;
-    my ($id) = @ARGV;
-    $c->stash->{compute}->delete_server($id);
-    return "deleted server $id";
+sub _get_ip {
+    my $server = shift;
+    for my $addr (@{ $server->{addresses}{public} }) {
+        return $addr->{addr} if $addr->{version} == 4;
+    }
+    return 'IP-MISSING';
 }
 
