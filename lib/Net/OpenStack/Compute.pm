@@ -108,6 +108,12 @@ sub delete_server {
     );
     $compute->create_server(name => 's1', flavor => $flav_id, image => $img_id);
 
+=head1 DESCRIPTION
+
+This is the main class responsible for interacting with OpenStack Compute.
+Also see L<oscompute> for the command line tool that is a wrapper for this
+class.
+
 =head1 METHODS
 
 =head2 get_server
