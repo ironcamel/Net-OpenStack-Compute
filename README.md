@@ -1,14 +1,11 @@
-=head1 DESCRIPTION
+# DESCRIPTION
 
 Net::OpenStack::Compute provides Perl bindings for the OpenStack Compute API.
 It also provides a command line tool 
-L<oscompute|https://metacpan.org/module/oscompute> for interacting with an
+[oscompute](https://metacpan.org/module/oscompute) for interacting with an
 OpenStack deployment.
-See 
-L<Net::OpenStack::Compute|https://metacpan.org/module/Net::OpenStack::Compute>
-for documentation.
 
-=head1 INSTALLATION
+# INSTALLATION
 
     sudo cpanm Net::OpenStack::Compute
 
@@ -32,12 +29,12 @@ If you do not have cpanm, you can install it via:
 
     curl -L cpanmin.us | perl - --sudo cpanm
 
-=head1 DOCUMENTATION
+# DOCUMENTATION
 
 See 
-L<Net::OpenStack::Compute|https://metacpan.org/module/Net::OpenStack::Compute>
-and L<oscompute|https://metacpan.org/module/oscompute>.
-Also, after installation, you can view the documentation via C<man> or C<perldoc>:
+[Net::OpenStack::Compute](https://metacpan.org/module/Net::OpenStack::Compute)
+and [oscompute](https://metacpan.org/module/oscompute).
+Also, after installation, you can view the documentation via `man` or `perldoc`:
 
     man oscompute
     man Net::OpenStack::Compute
