@@ -1,5 +1,8 @@
 Revision history for Net-OpenStack-Compute
 
+1.0001  2011-12-22
+        Fixing POD generation for oscompute.
+
 1.0000  2011-12-22
         Major interface changes for oscompute command line tool, inspired
             by git's command line tool.
