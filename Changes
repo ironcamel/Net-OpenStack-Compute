@@ -1,5 +1,8 @@
 Revision history for Net-OpenStack-Compute
 
+1.0100  2011-12-28
+        Adding support for images.
+
 1.0001  2011-12-22
         Fixing POD generation for oscompute.
 

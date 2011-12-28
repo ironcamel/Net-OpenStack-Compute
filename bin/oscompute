@@ -11,17 +11,22 @@ sub setup {
     my $c = shift;
 
     $c->register_commands({
-        server  => 'server [--verbose|-v] [show `uuid`] [add `name` `flavor` `image`] [--delete|-d `uuid`]',
+        server  => 'server [--verbose|-v] [show [<id>]]'
+            . ' [create <name> <flavor> <image>] [delete <id>]',
+        image => 'image [--verbose|-v] [show [<id>]]'
+            . ' [create <name> <server-id>] [delete <id>]',
     });
 
-    my $nova_url = $ENV{NOVA_URL};
-    die "NOVA_URL env var is missing. Did you forget to source novarc?\n"
-        unless $nova_url;
+    my $msg = "%s env var is missing. Did you forget to source novarc?\n";
+    die sprintf($msg, 'NOVA_URL') unless $ENV{NOVA_URL};
+    die sprintf($msg, 'NOVA_USERNAME') unless $ENV{NOVA_USERNAME};
+    die sprintf($msg, 'NOVA_PASSWORD or NOVA_API_KEY')
+        unless $ENV{NOVA_PASSWORD} || $ENV{NOVA_API_KEY};
 
     $c->stash->{compute} = Net::OpenStack::Compute->new(
-        auth_url   => $nova_url,
+        auth_url   => $ENV{NOVA_URL},
         user       => $ENV{NOVA_USERNAME},
-        key        => $ENV{NOVA_API_KEY},
+        password   => $ENV{NOVA_PASSWORD} || $ENV{NOVA_API_KEY},
         project_id => $ENV{NOVA_PROJECT_ID},
         region     => $ENV{NOVA_REGION_NAME},
     );
@@ -31,7 +36,7 @@ App::Rad->run();
 
 sub server {
     my $c = shift;
-    $c->getopt('verbose|v', 'delete|d=s');
+    $c->getopt('verbose|v');
     my $compute = $c->stash->{compute};
     my @args = @{$c->argv};
     given ($args[0]) {
@@ -41,30 +46,57 @@ sub server {
         when ('show') {
             return _get_servers($c) if @args == 1;
             my $data = from_json($compute->get_server($args[1]));
-            if ($c->options->{verbose}) {
-                return to_json($data, {pretty => 1});
-            } else {
-                my $s = $data->{server};
-                return 'No such server' unless $s;
-                return sprintf "%s\t%s\t%s\t%s",
-                    @$s{qw(id name status)}, _get_ip($s);
-            }
+            return _to_json($data) if $c->options->{verbose};
+            my $s = $data->{server};
+            return $s ? _format_servers($s) : 'No such server';
         }
-        when ('add') {
-            die "Usage: oscompute server add `name` `flavor` `image`\n"
+        when ('create') {
+            die "Usage: $0 server create <name> <flavor> <image>\n"
                 unless @args == 4;
             my ($cmd, $name, $flavor, $image) = @args;
-            return $compute->create_server(
-                name => $name, flavor => $flavor, image => $image);
+            return _to_json(
+                $compute->create_server(
+                    name => $name, flavor => $flavor, image => $image));
         }
         when ('delete') {
-            die "Usage: oscompute server delete `id`\n" unless @args == 2;
+            die "Usage: $0 server delete <id>\n" unless @args == 2;
             my ($cmd, $id) = @args;
             $compute->delete_server($id);
             return "Server $id has been marked for deletion";
         }
         default {
-            return "Supported server commands are show, add, and --delete";
+            return "Supported server commands are show, create, and --delete";
+        }
+    }
+}
+
+sub image {
+    my $c = shift;
+    $c->getopt('verbose|v');
+    my $compute = $c->stash->{compute};
+    my @args = @{$c->argv};
+    given ($args[0]) {
+        when (undef) {
+            return _get_images($c);
+        }
+        when ('show') {
+            return _get_images($c) if @args == 1;
+            my $data = from_json($compute->get_image($args[1]));
+            return _to_json($data) if $c->options->{verbose};
+            my $img = $data->{image};
+            return 'No such image' unless $img;
+            return _format_images($img);
+        }
+        when ('create') {
+            die "Usage: $0 image create <name> <server-id>\n" unless @args == 3;
+            my ($cmd, $name, $server) = @args;
+            return $compute->create_image(name => $name, server => $server);
+        }
+        when ('delete') {
+            die "Usage: $0 image delete <id>\n" unless @args == 2;
+            my ($cmd, $id) = @args;
+            $compute->delete_image($id);
+            return "Image $id has been marked for deletion";
         }
     }
 }
@@ -73,12 +105,28 @@ sub _get_servers {
     my $c = shift;
     my $compute = $c->stash->{compute};
     my $data = from_json($compute->get_servers(detail => 1));
-    if ($c->options->{verbose}) {
-        return to_json($data, {pretty => 1});
-    }
-    return join "\n",
+    return _to_json($data) if $c->options->{verbose};
+    return _format_servers(@{$data->{servers}});
+}
+
+sub _get_images {
+    my $c = shift;
+    my $compute = $c->stash->{compute};
+    my $data = from_json($compute->get_images(detail => 1));
+    return _to_json($data) if $c->options->{verbose};
+    return _format_images(@{$data->{images}});
+}
+
+sub _format_servers {
+    my @servers = @_;
+    join "\n",
         map { sprintf "%s\t%s\t%s\t%s", @$_{qw(id name status)}, _get_ip($_) }
-            @{$data->{servers}};
+        @servers;
+}
+
+sub _format_images {
+    my @images = @_;
+    join "\n", map { sprintf "%s\t%s\t%s", @$_{qw(id name status)} } @images;
 }
 
 sub _get_ip {
@@ -87,6 +135,10 @@ sub _get_ip {
         return $addr->{addr} if $addr->{version} == 4;
     }
     return 'IP-MISSING';
+}
+
+sub _to_json {
+    ref $_[0] ? to_json($_[0], {pretty => 1}) : _to_json(from_json($_[0]))
 }
 
 # PODNAME: oscompute
@@ -98,8 +150,8 @@ sub _get_ip {
 
     Available Commands:
         help        show syntax and available commands
-        server      server [--verbose|-v] [show `uuid`] [--delete|-d `uuid`]
-                           [add `name` `flavor` `image`]
+        server      server [--verbose|-v] [show [`id`]] [delete `id`]
+                           [create `name` `flavor` `image`]
 
     Examples:
 
@@ -116,8 +168,8 @@ sub _get_ip {
     oscompute server show ec05b52e-f575-469c-a91e-7f0ddd4fab95
 
     # Create a new server.
-    # Order of arguments are server add `name` `flavor` `image`
-    oscompute server add bob 1 11b2a5bf-590c-4dd4-931f-a65751a4db0e
+    # Order of arguments are server create `name` `flavor` `image`
+    oscompute server create bob 1 11b2a5bf-590c-4dd4-931f-a65751a4db0e
 
     # Delete a server.
     oscompute server delete ec05b52e-f575-469c-a91e-7f0ddd4fab95

@@ -11,8 +11,8 @@ use Net::OpenStack::Compute::Auth;
 
 has auth_url   => (is => 'ro', isa => 'Str', required => 1);
 has user       => (is => 'ro', isa => 'Str', required => 1);
-has key        => (is => 'ro', isa => 'Str', required => 1);
-has project_id => (is => 'ro');
+has password   => (is => 'ro', isa => 'Str', required => 1);
+has project_id => (is => 'ro', isa => 'Str', required => 1);
 has region     => (is => 'ro');
 
 has _auth => (
@@ -24,7 +24,7 @@ has _auth => (
         Net::OpenStack::Compute::Auth->new(
             auth_url   => $self->auth_url,
             user       => $self->user,
-            password   => $self->key,
+            password   => $self->password,
             project_id => $self->project_id,
             region     => $self->region,
         );
@@ -88,8 +88,50 @@ sub create_server {
 sub delete_server {
     my ($self, $id) = @_;
     my $base_url = $self->_base_url;
-
     my $req = HTTP::Request->new('DELETE', "$base_url/servers/$id");
+    my $res = $self->_agent->request($req);
+    return $res->is_success;
+}
+
+sub get_images {
+    my ($self, %params) = @_;
+    my $detail = '/detail';
+    $detail = '' if exists $params{detail} && !$params{detail};
+    my $base_url = $self->_base_url;
+    return $self->_agent->get("$base_url/images$detail")->content;
+}
+
+sub get_image {
+    my ($self, $id) = @_;
+    my $base_url = $self->_base_url;
+    return $self->_agent->get("$base_url/images/$id")->content;
+}
+
+sub create_image {
+    my ($self, %params) = @_;
+    my ($name, $server, $meta) = @params{qw(name server meta)};
+    croak "name param is required"   unless defined $name;
+    croak "server param is required" unless defined $server;
+    croak "meta param must be a hashref" if $meta and ! ref($meta) == 'HASH';
+    $meta ||= {};
+    my $base_url = $self->_base_url;
+
+    my $res = $self->_agent->post("$base_url/servers/$server/action",
+        content_type => 'application/json',
+        Content => to_json({
+            createImage => {
+                name     => $name,
+                metadata => $meta,
+            }
+        }),
+    );
+    return $res->content;
+}
+
+sub delete_image {
+    my ($self, $id) = @_;
+    my $base_url = $self->_base_url;
+    my $req = HTTP::Request->new('DELETE', "$base_url/images/$id");
     my $res = $self->_agent->request($req);
     return $res->is_success;
 }
@@ -102,9 +144,9 @@ sub delete_server {
     my $compute = Net::OpenStack::Compute->new(
         auth_url   => $auth_url,
         user       => $user,
-        key        => $password,
-        project_id => $project_id, # Optional
-        region     => $egion,      # Optional
+        password   => $password,
+        project_id => $project_id,
+        region     => $region, # Optional
     );
     $compute->create_server(name => 's1', flavor => $flav_id, image => $img_id);
 
@@ -123,7 +165,7 @@ class.
 =head2 get_servers
 
     get_servers()
-    get_servers(detail => 0)
+    get_servers(detail => 0) # Detail defaults to 1.
 
 =head2 create_server
 
@@ -132,6 +174,23 @@ class.
 =head2 delete_server
 
     delete_server($id)
+
+=head2 get_image
+
+    get_image($id)
+
+=head2 get_images
+
+    get_images()
+    get_images(detail => 0) # Detail defaults to 1.
+
+=head2 create_image
+
+    create_image(name => $name, server => $server_id)
+
+=head2 delete_image
+
+    delete_image($id)
 
 =cut
 
