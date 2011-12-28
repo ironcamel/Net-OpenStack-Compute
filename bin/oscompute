@@ -131,7 +131,7 @@ sub _format_images {
 
 sub _get_ip {
     my $server = shift;
-    for my $addr (@{ $server->{addresses}{public} }) {
+    for my $addr (map @{$server->{addresses}{$_} || []}, qw(public private)) {
         return $addr->{addr} if $addr->{version} == 4;
     }
     return 'IP-MISSING';
