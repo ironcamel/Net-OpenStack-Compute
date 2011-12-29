@@ -11,10 +11,11 @@ sub setup {
     my $c = shift;
 
     $c->register_commands({
-        server  => 'server [--verbose|-v] [show [<id>]]'
+        server => 'server [--verbose|-v] [show [<id>]]'
             . ' [create <name> <flavor> <image>] [delete <id>]',
-        image => 'image [--verbose|-v] [show [<id>]]'
+        image  => 'image [--verbose|-v] [show [<id>]]'
             . ' [create <name> <server-id>] [delete <id>]',
+        flavor => 'flavor [--verbose|-v] [show [<id>]]',
     });
 
     my $msg = "%s env var is missing. Did you forget to source novarc?\n";
@@ -30,73 +31,98 @@ sub setup {
         project_id => $ENV{NOVA_PROJECT_ID},
         region     => $ENV{NOVA_REGION_NAME},
     );
+    $c->getopt('verbose|v');
 }
 
 App::Rad->run();
 
 sub server {
     my $c = shift;
-    $c->getopt('verbose|v');
     my $compute = $c->stash->{compute};
     my @args = @{$c->argv};
-    given ($args[0]) {
+    my $sub_cmd = shift @args;
+    given ($sub_cmd) {
         when (undef) {
             return _get_servers($c);
         }
         when ('show') {
-            return _get_servers($c) if @args == 1;
-            my $data = from_json($compute->get_server($args[1]));
-            return _to_json($data) if $c->options->{verbose};
-            my $s = $data->{server};
+            return _get_servers($c) unless @args;
+            my $s = $compute->get_server($args[0]);
+            return _to_json($s) if $c->options->{verbose};
             return $s ? _format_servers($s) : 'No such server';
         }
         when ('create') {
             die "Usage: $0 server create <name> <flavor> <image>\n"
-                unless @args == 4;
-            my ($cmd, $name, $flavor, $image) = @args;
-            return _to_json(
-                $compute->create_server(
-                    name => $name, flavor => $flavor, image => $image));
+                unless @args == 3;
+            my ($name, $flavor, $image) = @args;
+            my $s = $compute->create_server(
+                name => $name, flavor => $flavor, image => $image);
+            return _to_json($s) if $c->options->{verbose};
+            return "Creating server $s->{id} with password $s->{adminPass}";
         }
         when ('delete') {
-            die "Usage: $0 server delete <id>\n" unless @args == 2;
-            my ($cmd, $id) = @args;
+            die "Usage: $0 server delete <id>\n" unless @args == 1;
+            my ($id) = @args;
             $compute->delete_server($id);
             return "Server $id has been marked for deletion";
         }
         default {
-            return "Supported server commands are show, create, and --delete";
+            die "Supported server commands are show, create and delete.\n";
         }
     }
 }
 
 sub image {
     my $c = shift;
-    $c->getopt('verbose|v');
     my $compute = $c->stash->{compute};
     my @args = @{$c->argv};
-    given ($args[0]) {
+    my $sub_cmd = shift @args;
+    given ($sub_cmd) {
         when (undef) {
             return _get_images($c);
         }
         when ('show') {
-            return _get_images($c) if @args == 1;
-            my $data = from_json($compute->get_image($args[1]));
-            return _to_json($data) if $c->options->{verbose};
-            my $img = $data->{image};
+            return _get_images($c) unless @args;
+            my $img = $compute->get_image($args[0]);
+            return _to_json($img) if $c->options->{verbose};
             return 'No such image' unless $img;
             return _format_images($img);
         }
         when ('create') {
-            die "Usage: $0 image create <name> <server-id>\n" unless @args == 3;
-            my ($cmd, $name, $server) = @args;
+            die "Usage: $0 image create <name> <server-id>\n" unless @args == 2;
+            my ($name, $server) = @args;
             return $compute->create_image(name => $name, server => $server);
         }
         when ('delete') {
-            die "Usage: $0 image delete <id>\n" unless @args == 2;
-            my ($cmd, $id) = @args;
+            die "Usage: $0 image delete <id>\n" unless @args == 1;
+            my ($id) = @args;
             $compute->delete_image($id);
             return "Image $id has been marked for deletion";
+        }
+        default {
+            die "Supported image commands are show, create and delete.\n";
+        }
+    }
+}
+
+sub flavor {
+    my $c = shift;
+    my $compute = $c->stash->{compute};
+    my @args = @{$c->argv};
+    my $sub_cmd = shift @args;
+    given ($sub_cmd) {
+        when (undef) {
+            return _get_flavors($c);
+        }
+        when ('show') {
+            return _get_flavors($c) unless @args;
+            my $flavor = $compute->get_flavor($args[0]);
+            return _to_json($flavor) if $c->options->{verbose};
+            return 'No such flavor' unless $flavor;
+            return _format_flavors($flavor);
+        }
+        default {
+            die "The only supported flavor command is show.\n";
         }
     }
 }
@@ -104,29 +130,40 @@ sub image {
 sub _get_servers {
     my $c = shift;
     my $compute = $c->stash->{compute};
-    my $data = from_json($compute->get_servers(detail => 1));
-    return _to_json($data) if $c->options->{verbose};
-    return _format_servers(@{$data->{servers}});
+    my $servers = $compute->get_servers(detail => 1);
+    return _to_json($servers) if $c->options->{verbose};
+    return _format_servers(@$servers);
 }
 
 sub _get_images {
     my $c = shift;
     my $compute = $c->stash->{compute};
-    my $data = from_json($compute->get_images(detail => 1));
-    return _to_json($data) if $c->options->{verbose};
-    return _format_images(@{$data->{images}});
+    my $images = $compute->get_images(detail => 1);
+    return _to_json($images) if $c->options->{verbose};
+    return _format_images(@$images);
+}
+
+sub _get_flavors {
+    my $c = shift;
+    my $compute = $c->stash->{compute};
+    my $flavors = $compute->get_flavors(detail => 1);
+    return _to_json($flavors) if $c->options->{verbose};
+    return _format_flavors(@$flavors);
 }
 
 sub _format_servers {
     my @servers = @_;
-    join "\n",
-        map { sprintf "%s\t%s\t%s\t%s", @$_{qw(id name status)}, _get_ip($_) }
-        @servers;
+    join "\n", map { join "\t", @$_{qw(id name status)}, _get_ip($_) } @servers;
 }
 
 sub _format_images {
     my @images = @_;
-    join "\n", map { sprintf "%s\t%s\t%s", @$_{qw(id name status)} } @images;
+    join "\n", map { join "\t", @$_{qw(id name status)} } @images;
+}
+
+sub _format_flavors {
+    my @flavors = @_;
+    join "\n", map { join "\t", @$_{qw(id name ram)} } @flavors;
 }
 
 sub _get_ip {
@@ -149,22 +186,23 @@ sub _to_json {
     Usage: oscompute command [arguments]
 
     Available Commands:
+        flavor      flavor [--verbose|-v] [show [<id>]]
         help        show syntax and available commands
-        server      server [--verbose|-v] [show [`id`]] [delete `id`]
-                           [create `name` `flavor` `image`]
+        image       image [--verbose|-v] [show [<id>]] [create <name> <server-id>] [delete <id>]
+        server      server [--verbose|-v] [show [<id>]] [create <name> <flavor> <image>] [delete <id>]
 
     Examples:
 
-    # Lists all servers.
+    # List all servers.
     oscompute server
 
-    # Also, lists all servers.
+    # Same thing.
     oscompute server show
 
     # Show all details.
     oscompute server -v show
 
-    # Show one server.
+    # Show info for a particular server.
     oscompute server show ec05b52e-f575-469c-a91e-7f0ddd4fab95
 
     # Create a new server.
@@ -173,6 +211,12 @@ sub _to_json {
 
     # Delete a server.
     oscompute server delete ec05b52e-f575-469c-a91e-7f0ddd4fab95
+
+    # List all available images.
+    oscompute image
+
+    # Create a snapshot image of a given server.
+    oscompute image create myimg ec05b52e-f575-469c-a91e-7f0ddd4fab95
 
 =head1 DESCRIPTION
 

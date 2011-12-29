@@ -5,7 +5,7 @@ use Any::Moose;
 
 use Carp;
 use HTTP::Request;
-use JSON qw(to_json);
+use JSON qw(from_json to_json);
 use LWP;
 use Net::OpenStack::Compute::Auth;
 
@@ -38,7 +38,7 @@ has _base_url => (
     default => sub { shift->_auth->base_url },
 );
 
-has _agent => (
+has _ua => (
     is => 'ro',
     lazy => 1,
     default => sub {
@@ -51,16 +51,14 @@ has _agent => (
 
 sub get_servers {
     my ($self, %params) = @_;
-    my $detail = '/detail';
-    $detail = '' if exists $params{detail} && !$params{detail};
-    my $base_url = $self->_base_url;
-    return $self->_agent->get("$base_url/servers$detail")->content;
+    my $res = $self->_ua->get($self->_url('/servers', $params{detail}));
+    return from_json($res->content)->{servers};
 }
 
 sub get_server {
     my ($self, $id) = @_;
-    my $base_url = $self->_base_url;
-    return $self->_agent->get("$base_url/servers/$id")->content;
+    my $res = $self->_ua->get($self->_url("/servers/$id"));
+    return from_json($res->content)->{server};
 }
 
 sub create_server {
@@ -69,10 +67,9 @@ sub create_server {
     croak "name param is required"   unless defined $name;
     croak "flavor param is required" unless defined $flavor;
     croak "image param is required"  unless defined $image;
-    my $base_url = $self->_base_url;
 
-    my $res = $self->_agent->post(
-        "$base_url/servers",
+    my $res = $self->_ua->post(
+        $self->_url('/servers'),
         content_type => 'application/json',
         Content => to_json({
             server => {
@@ -82,29 +79,28 @@ sub create_server {
             }
         })
     );
-    return $res->content;
+    _check_res($res);
+    return from_json($res->content)->{server};
 }
 
 sub delete_server {
     my ($self, $id) = @_;
-    my $base_url = $self->_base_url;
-    my $req = HTTP::Request->new('DELETE', "$base_url/servers/$id");
-    my $res = $self->_agent->request($req);
-    return $res->is_success;
+    my $req = HTTP::Request->new(DELETE => $self->_url("/servers/$id"));
+    my $res = $self->_ua->request($req);
+    _check_res($res);
+    return 1;
 }
 
 sub get_images {
     my ($self, %params) = @_;
-    my $detail = '/detail';
-    $detail = '' if exists $params{detail} && !$params{detail};
-    my $base_url = $self->_base_url;
-    return $self->_agent->get("$base_url/images$detail")->content;
+    my $res = $self->_ua->get($self->_url('/images', $params{detail}));
+    return from_json($res->content)->{images};
 }
 
 sub get_image {
     my ($self, $id) = @_;
-    my $base_url = $self->_base_url;
-    return $self->_agent->get("$base_url/images/$id")->content;
+    my $res = $self->_ua->get($self->_url("/images/$id"));
+    return from_json($res->content)->{image};
 }
 
 sub create_image {
@@ -114,9 +110,8 @@ sub create_image {
     croak "server param is required" unless defined $server;
     croak "meta param must be a hashref" if $meta and ! ref($meta) == 'HASH';
     $meta ||= {};
-    my $base_url = $self->_base_url;
 
-    my $res = $self->_agent->post("$base_url/servers/$server/action",
+    my $res = $self->_ua->post($self->_url("/servers/$server/action"),
         content_type => 'application/json',
         Content => to_json({
             createImage => {
@@ -125,16 +120,38 @@ sub create_image {
             }
         }),
     );
-    return $res->content;
+    _check_res($res);
+    return from_json($res->content);
 }
 
 sub delete_image {
     my ($self, $id) = @_;
-    my $base_url = $self->_base_url;
-    my $req = HTTP::Request->new('DELETE', "$base_url/images/$id");
-    my $res = $self->_agent->request($req);
-    return $res->is_success;
+    my $req = HTTP::Request->new(DELETE => $self->_url("/images/$id"));
+    my $res = $self->_ua->request($req);
+    _check_res($res);
+    return 1;
 }
+
+sub get_flavors {
+    my ($self, %params) = @_;
+    my $res = $self->_ua->get($self->_url('/flavors', $params{detail}));
+    return from_json($res->content)->{flavors};
+}
+
+sub get_flavor {
+    my ($self, $id) = @_;
+    my $res = $self->_ua->get($self->_url("/flavors/$id"));
+    return from_json($res->content)->{flavor};
+}
+
+sub _url {
+    my ($self, $path, $is_detail) = @_;
+    my $url = $self->_base_url . $path;
+    $url .= '/detail' if $is_detail;
+    return $url;
+}
+
+sub _check_res { croak $_[0]->content unless $_[0]->is_success }
 
 # ABSTRACT: Bindings for the OpenStack compute api.
 
@@ -191,6 +208,15 @@ class.
 =head2 delete_image
 
     delete_image($id)
+
+=head2 get_flavor
+
+    get_flavor($id)
+
+=head2 get_flavors
+
+    get_flavors()
+    get_flavors(detail => 0) # Detail defaults to 1.
 
 =cut
 
