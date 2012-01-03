@@ -1,5 +1,8 @@
 Revision history for Net-OpenStack-Compute
 
+1.0301  2012-01-03
+        Forgot to add App::Rad::Plugin::MoreHelp dep.
+
 1.0300  2012-01-02
         Added single letter abbreviations for CLI commands.
 
