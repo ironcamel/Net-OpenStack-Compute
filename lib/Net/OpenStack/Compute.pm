@@ -29,13 +29,7 @@ has _auth => (
             region     => $self->region,
         );
     },
-);
-
-has _base_url => (
-    is   => 'ro',
-    isa  => 'Str',
-    lazy => 1,
-    default => sub { shift->_auth->base_url },
+    handles => [qw(base_url token)],
 );
 
 has _ua => (
@@ -44,7 +38,7 @@ has _ua => (
     default => sub {
         my $self = shift;
         my $agent = LWP::UserAgent->new();
-        $agent->default_header(x_auth_token => $self->_auth->token);
+        $agent->default_header(x_auth_token => $self->token);
         return $agent;
     },
 );
@@ -146,7 +140,7 @@ sub get_flavor {
 
 sub _url {
     my ($self, $path, $is_detail) = @_;
-    my $url = $self->_base_url . $path;
+    my $url = $self->base_url . $path;
     $url .= '/detail' if $is_detail;
     return $url;
 }
