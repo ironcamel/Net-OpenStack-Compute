@@ -2,7 +2,7 @@
 use strict;
 use warnings;
 use v5.10;
-use App::Rad;
+use App::Rad qw(MoreHelp);
 use JSON qw(from_json to_json);
 use LWP;
 use Net::OpenStack::Compute;
@@ -11,12 +11,34 @@ sub setup {
     my $c = shift;
 
     $c->register_commands({
-        server => 'server [--verbose|-v] [show [<id>]]'
-            . ' [create <name> <flavor> <image>] [delete <id>]',
-        image  => 'image [--verbose|-v] [show [<id>]]'
-            . ' [create <name> <server-id>] [delete <id>]',
-        flavor => 'flavor [--verbose|-v] [show [<id>]]',
+        server => 'perform server actions',
+        image  => 'perform image actions',
+        flavor => 'perform flavor actions',
     });
+    $c->register(s => \&server, 'alias for server');
+    $c->register(i => \&image, 'alias for image');
+    $c->register(f => \&flavor, 'alias for flavor');
+    $c->more_help(<<EOD);
+    
+Server commands:
+
+    server [list]
+    server show [<id>]
+    server create <name> <flavor> <image>
+    server delete <id>
+
+Image commands:
+
+    image [list]
+    image show [<id>]
+    image create <name> <server-id>
+    image delete <id>
+
+Flavor commands:
+
+    flavor [list]
+    flavor show [<id>]
+EOD
 
     my $msg = "%s env var is missing. Did you forget to source novarc?\n";
     die sprintf($msg, 'NOVA_URL') unless $ENV{NOVA_URL};
@@ -45,8 +67,11 @@ sub server {
         when (undef) {
             return _get_servers($c);
         }
+        when ('list') {
+            return _get_servers($c);
+        }
         when ('show') {
-            return _get_servers($c) unless @args;
+            die "Usage: $0 server show <id>\n" unless @args == 1;
             my $s = $compute->get_server($args[0]);
             return _to_json($s) if $c->options->{verbose};
             return $s ? _format_servers($s) : 'No such server';
@@ -67,7 +92,8 @@ sub server {
             return "Server $id has been marked for deletion";
         }
         default {
-            die "Supported server commands are show, create and delete.\n";
+            die "Supported server commands are list, show, create and delete."
+                . "\n";
         }
     }
 }
@@ -81,8 +107,11 @@ sub image {
         when (undef) {
             return _get_images($c);
         }
+        when ('list') {
+            return _get_images($c);
+        }
         when ('show') {
-            return _get_images($c) unless @args;
+            die "Usage: $0 image show <id>\n" unless @args == 1;
             my $img = $compute->get_image($args[0]);
             return _to_json($img) if $c->options->{verbose};
             return 'No such image' unless $img;
@@ -100,7 +129,7 @@ sub image {
             return "Image $id has been marked for deletion";
         }
         default {
-            die "Supported image commands are show, create and delete.\n";
+            die "Supported image commands are list, show, create and delete.\n";
         }
     }
 }
@@ -114,15 +143,19 @@ sub flavor {
         when (undef) {
             return _get_flavors($c);
         }
+        when ('list') {
+            return _get_flavors($c);
+        }
         when ('show') {
-            return _get_flavors($c) unless @args;
+            die "Usage: $0 flavor show <id>\n" unless @args == 1;
             my $flavor = $compute->get_flavor($args[0]);
             return _to_json($flavor) if $c->options->{verbose};
             return 'No such flavor' unless $flavor;
             return _format_flavors($flavor);
         }
         default {
-            die "The only supported flavor command is show.\n";
+            die "Supported flavor commands are list, show, create and delete."
+                . "\n";
         }
     }
 }
@@ -174,6 +207,7 @@ sub _get_ip {
     return 'IP-MISSING';
 }
 
+# Warning, recursive magic ahead.
 sub _to_json {
     ref $_[0] ? to_json($_[0], {pretty => 1}) : _to_json(from_json($_[0]))
 }
