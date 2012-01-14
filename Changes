@@ -1,5 +1,8 @@
 Revision history for Net-OpenStack-Compute
 
+1.0400  2012-01-14
+        Can now show or delete a server by name in oscompute.
+
 1.0302  2012-01-03
         Added token() and base_url() methods.
 

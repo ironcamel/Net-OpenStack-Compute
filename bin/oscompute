@@ -23,21 +23,21 @@ sub setup {
 Server commands:
 
     server [list]
-    server show [<id>]
+    server show <id|name>
     server create <name> <flavor> <image>
-    server delete <id>
+    server delete <id|name>
 
 Image commands:
 
     image [list]
-    image show [<id>]
+    image show <id>
     image create <name> <server-id>
     image delete <id>
 
 Flavor commands:
 
     flavor [list]
-    flavor show [<id>]
+    flavor show <id>
 EOD
 
     my $msg = "%s env var is missing. Did you forget to source novarc?\n";
@@ -72,9 +72,12 @@ sub server {
         }
         when ('show') {
             die "Usage: $0 server show <id>\n" unless @args == 1;
-            my $s = $compute->get_server($args[0]);
+            my $id = $args[0];
+            my $s = $compute->get_server($id);
+            $s = $compute->get_servers_by_name($id)->[0] unless $s;
+            return 'No such server' unless $s;
             return _to_json($s) if $c->options->{verbose};
-            return $s ? _format_servers($s) : 'No such server';
+            return _format_servers($s);
         }
         when ('create') {
             die "Usage: $0 server create <name> <flavor> <image>\n"
@@ -88,8 +91,12 @@ sub server {
         when ('delete') {
             die "Usage: $0 server delete <id>\n" unless @args == 1;
             my ($id) = @args;
-            $compute->delete_server($id);
-            return "Server $id has been marked for deletion";
+            if (not $compute->delete_server($id)) {
+                my $s = $compute->get_servers_by_name($id)->[0];
+                return "Could not delete server $id"
+                    unless $s and $compute->delete_server($s->{id});
+            }
+            return "Server $id has been marked for deletion.";
         }
         default {
             die "Supported server commands are list, show, create and delete."
@@ -220,24 +227,33 @@ sub _to_json {
     Usage: oscompute command [arguments]
 
     Available Commands:
-        flavor      flavor [--verbose|-v] [show [<id>]]
+        f           alias for flavor
+        flavor      perform flavor actions
         help        show syntax and available commands
-        image       image [--verbose|-v] [show [<id>]] [create <name> <server-id>] [delete <id>]
-        server      server [--verbose|-v] [show [<id>]] [create <name> <flavor> <image>] [delete <id>]
+        i           alias for image
+        image       perform image actions
+        s           alias for server
+        server      perform server actions
 
     Examples:
 
     # List all servers.
+    oscompute s
+
+    # Same thing.
     oscompute server
 
     # Same thing.
-    oscompute server show
+    oscompute server list
 
     # Show all details.
-    oscompute server -v show
+    oscompute server -v list
 
-    # Show info for a particular server.
+    # Show info for a particular server by id.
     oscompute server show ec05b52e-f575-469c-a91e-7f0ddd4fab95
+
+    # Show info for a particular server by name.
+    oscompute server show bob
 
     # Create a new server.
     # Order of arguments are server create `name` `flavor` `image`
@@ -247,7 +263,7 @@ sub _to_json {
     oscompute server delete ec05b52e-f575-469c-a91e-7f0ddd4fab95
 
     # List all available images.
-    oscompute image
+    oscompute image list
 
     # Create a snapshot image of a given server.
     oscompute image create myimg ec05b52e-f575-469c-a91e-7f0ddd4fab95

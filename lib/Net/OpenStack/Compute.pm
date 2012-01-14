@@ -52,7 +52,14 @@ sub get_servers {
 sub get_server {
     my ($self, $id) = @_;
     my $res = $self->_ua->get($self->_url("/servers/$id"));
+    return undef unless $res->is_success;
     return from_json($res->content)->{server};
+}
+
+sub get_servers_by_name {
+    my ($self, $name) = @_;
+    my $servers = $self->get_servers(detail => 1);
+    return [ grep { $_->{name} eq $name } @$servers ];
 }
 
 sub create_server {
@@ -81,8 +88,7 @@ sub delete_server {
     my ($self, $id) = @_;
     my $req = HTTP::Request->new(DELETE => $self->_url("/servers/$id"));
     my $res = $self->_ua->request($req);
-    _check_res($res);
-    return 1;
+    return $res->is_success;
 }
 
 sub get_images {
@@ -147,7 +153,7 @@ sub _url {
 
 sub _check_res { croak $_[0]->content unless $_[0]->is_success }
 
-# ABSTRACT: Bindings for the OpenStack compute api.
+# ABSTRACT: Bindings for the OpenStack Compute API.
 
 =head1 SYNOPSIS
 
@@ -163,9 +169,8 @@ sub _check_res { croak $_[0]->content unless $_[0]->is_success }
 
 =head1 DESCRIPTION
 
-This is the main class responsible for interacting with OpenStack Compute.
-Also see L<oscompute> for the command line tool that is a wrapper for this
-class.
+This class is an interface to the OpenStack Compute API.
+Also see the L<oscompute> command line tool.
 
 =head1 METHODS
 
@@ -173,10 +178,20 @@ class.
 
     get_server($id)
 
+Returns the server with the given id or undef if it doesn't exist.
+
 =head2 get_servers
 
     get_servers()
-    get_servers(detail => 0) # Detail defaults to 1.
+    get_servers(detail => 1) # Detail defaults to 0.
+
+Returns an arrayref of all the servers.
+
+=head2 get_servers_by_name
+
+    get_servers_by_name($name)
+
+Returns an arrayref of servers with the given name.
 
 =head2 create_server
 
@@ -193,7 +208,7 @@ class.
 =head2 get_images
 
     get_images()
-    get_images(detail => 0) # Detail defaults to 1.
+    get_images(detail => 1) # Detail defaults to 0.
 
 =head2 create_image
 
@@ -210,7 +225,28 @@ class.
 =head2 get_flavors
 
     get_flavors()
-    get_flavors(detail => 0) # Detail defaults to 1.
+    get_flavors(detail => 1) # Detail defaults to 0.
+
+=head2 token
+
+    token()
+
+Returns the OpenStack Compute API auth token.
+
+=head2 base_url
+
+    base_url()
+
+Returns the base url for the OpenStack Compute API, which is returned by the
+server after authenticating.
+
+=head1 SEE ALSO
+
+=over
+
+=item L<oscompute>
+
+=back
 
 =cut
 
