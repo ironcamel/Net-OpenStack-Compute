@@ -1,5 +1,8 @@
 Revision history for Net-OpenStack-Compute
 
+1.0401  2012-01-17
+        Fixing the parsing of the create image response.
+
 1.0400  2012-01-14
         Can now show or delete a server by name in oscompute.
 

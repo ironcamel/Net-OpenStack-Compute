@@ -121,7 +121,7 @@ sub create_image {
         }),
     );
     _check_res($res);
-    return from_json($res->content);
+    return 1;
 }
 
 sub delete_image {

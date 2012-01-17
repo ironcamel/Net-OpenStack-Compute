@@ -127,13 +127,14 @@ sub image {
         when ('create') {
             die "Usage: $0 image create <name> <server-id>\n" unless @args == 2;
             my ($name, $server) = @args;
-            return $compute->create_image(name => $name, server => $server);
+            $compute->create_image(name => $name, server => $server);
+            return "Snapshot of server $server has been scheduled.";
         }
         when ('delete') {
             die "Usage: $0 image delete <id>\n" unless @args == 1;
             my ($id) = @args;
             $compute->delete_image($id);
-            return "Image $id has been marked for deletion";
+            return "Image $id has been marked for deletion.";
         }
         default {
             die "Supported image commands are list, show, create and delete.\n";
