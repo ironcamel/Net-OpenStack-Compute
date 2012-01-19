@@ -3,6 +3,7 @@ use strict;
 use warnings;
 use v5.10;
 use App::Rad qw(MoreHelp);
+use Carp qw(croak);
 use JSON qw(from_json to_json);
 use LWP;
 use Net::OpenStack::Compute;
@@ -23,21 +24,25 @@ sub setup {
 Server commands:
 
     server [list]
-    server show <id|name>
-    server create <name> <flavor> <image>
-    server delete <id|name>
+    server show <server>
+    server create <name> <flavor> <image-id>
+    server delete <server>
+    server rebuild <server> <image-id>
 
 Image commands:
 
     image [list]
-    image show <id>
-    image create <name> <server-id>
-    image delete <id>
+    image show <image-id>
+    image create <name> <server>
+    image delete <image-id>
 
 Flavor commands:
 
     flavor [list]
-    flavor show <id>
+    flavor show <flavor-id>
+
+Notes:
+    Any <server> param can be a server id or a server name.
 EOD
 
     my $msg = "%s env var is missing. Did you forget to source novarc?\n";
@@ -64,18 +69,12 @@ sub server {
     my @args = @{$c->argv};
     my $sub_cmd = shift @args;
     given ($sub_cmd) {
-        when (undef) {
-            return _get_servers($c);
-        }
-        when ('list') {
-            return _get_servers($c);
-        }
+        when (undef)  { return _get_servers($c) }
+        when ('list') { return _get_servers($c) }
         when ('show') {
-            die "Usage: $0 server show <id>\n" unless @args == 1;
+            die "Usage: $0 server show <server>\n" unless @args == 1;
             my $id = $args[0];
-            my $s = $compute->get_server($id);
-            $s = $compute->get_servers_by_name($id)->[0] unless $s;
-            return 'No such server' unless $s;
+            my $s = _get_server($c, $id);
             return _to_json($s) if $c->options->{verbose};
             return _format_servers($s);
         }
@@ -83,20 +82,26 @@ sub server {
             die "Usage: $0 server create <name> <flavor> <image>\n"
                 unless @args == 3;
             my ($name, $flavor, $image) = @args;
-            my $s = $compute->create_server(
-                name => $name, flavor => $flavor, image => $image);
+            my $s = $compute->create_server({
+                name => $name, flavorRef => $flavor, imageRef => $image});
             return _to_json($s) if $c->options->{verbose};
             return "Creating server $s->{id} with password $s->{adminPass}";
         }
         when ('delete') {
-            die "Usage: $0 server delete <id>\n" unless @args == 1;
+            die "Usage: $0 server delete <server>\n" unless @args == 1;
             my ($id) = @args;
-            if (not $compute->delete_server($id)) {
-                my $s = $compute->get_servers_by_name($id)->[0];
-                return "Could not delete server $id"
-                    unless $s and $compute->delete_server($s->{id});
-            }
+            my $s = _get_server($c, $id);
+            $compute->delete_server($s->{id});
             return "Server $id has been marked for deletion.";
+        }
+        when ('rebuild') {
+            die "Usage: $0 server rebuild <server> <image-id>\n"
+                unless @args == 2;
+            my ($server_id, $image_id) = @args;
+            my $s = _get_server($c, $server_id);
+            $s = $compute->rebuild_server($s->{id}, { imageRef => $image_id });
+            return _to_json($s) if $c->options->{verbose};
+            return "Server $server_id is rebuilding.";
         }
         default {
             die "Supported server commands are list, show, create and delete."
@@ -111,12 +116,8 @@ sub image {
     my @args = @{$c->argv};
     my $sub_cmd = shift @args;
     given ($sub_cmd) {
-        when (undef) {
-            return _get_images($c);
-        }
-        when ('list') {
-            return _get_images($c);
-        }
+        when (undef)  { return _get_images($c) }
+        when ('list') { return _get_images($c) }
         when ('show') {
             die "Usage: $0 image show <id>\n" unless @args == 1;
             my $img = $compute->get_image($args[0]);
@@ -125,9 +126,10 @@ sub image {
             return _format_images($img);
         }
         when ('create') {
-            die "Usage: $0 image create <name> <server-id>\n" unless @args == 2;
+            die "Usage: $0 image create <name> <server>\n" unless @args == 2;
             my ($name, $server) = @args;
-            $compute->create_image(name => $name, server => $server);
+            my $s = _get_server($c, $server);
+            $compute->create_image($s->{id}, { name => $name });
             return "Snapshot of server $server has been scheduled.";
         }
         when ('delete') {
@@ -148,17 +150,13 @@ sub flavor {
     my @args = @{$c->argv};
     my $sub_cmd = shift @args;
     given ($sub_cmd) {
-        when (undef) {
-            return _get_flavors($c);
-        }
-        when ('list') {
-            return _get_flavors($c);
-        }
+        when (undef)  { return _get_flavors($c) }
+        when ('list') { return _get_flavors($c) }
         when ('show') {
             die "Usage: $0 flavor show <id>\n" unless @args == 1;
             my $flavor = $compute->get_flavor($args[0]);
+            die "No such flavor\n" unless $flavor;
             return _to_json($flavor) if $c->options->{verbose};
-            return 'No such flavor' unless $flavor;
             return _format_flavors($flavor);
         }
         default {
@@ -166,6 +164,15 @@ sub flavor {
                 . "\n";
         }
     }
+}
+
+sub _get_server {
+    my ($c, $id) = @_;
+    die "Server id is missing.\n" unless defined $id;
+    my $compute = $c->stash->{compute};
+    my $s = $compute->get_server($id);
+    $s = $compute->get_servers_by_name($id)->[0] unless $s;
+    die "Server $id does not exist.\n" unless $s;
 }
 
 sub _get_servers {
@@ -236,6 +243,30 @@ sub _to_json {
         s           alias for server
         server      perform server actions
 
+    Server commands:
+
+        server [list]
+        server show <server>
+        server create <name> <flavor> <image-id>
+        server delete <server>
+        server rebuild <server> <image-id>
+
+    Image commands:
+
+        image [list]
+        image show <image-id>
+        image create <name> <server>
+        image delete <image-id>
+
+    Flavor commands:
+
+        flavor [list]
+        flavor show <flavor-id>
+
+    Notes:
+
+        Any <server> param can be a server id or a server name.
+
     Examples:
 
     # List all servers.
@@ -262,6 +293,9 @@ sub _to_json {
 
     # Delete a server.
     oscompute server delete ec05b52e-f575-469c-a91e-7f0ddd4fab95
+
+    # Rebuild server bob with the given image.
+    oscompute server rebuild bob d54c514e-da74-4307-805a-423a06160f6c
 
     # List all available images.
     oscompute image list

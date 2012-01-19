@@ -51,6 +51,7 @@ sub get_servers {
 
 sub get_server {
     my ($self, $id) = @_;
+    croak "Invalid server id" unless $id;
     my $res = $self->_ua->get($self->_url("/servers/$id"));
     return undef unless $res->is_success;
     return from_json($res->content)->{server};
@@ -63,23 +64,12 @@ sub get_servers_by_name {
 }
 
 sub create_server {
-    my ($self, %params) = @_;
-    my ($name, $flavor, $image) = @params{qw(name flavor image)};
-    croak "name param is required"   unless defined $name;
-    croak "flavor param is required" unless defined $flavor;
-    croak "image param is required"  unless defined $image;
-
-    my $res = $self->_ua->post(
-        $self->_url('/servers'),
-        content_type => 'application/json',
-        Content => to_json({
-            server => {
-                name      => $name,
-                imageRef  => $image,
-                flavorRef => $flavor,
-            }
-        })
-    );
+    my ($self, $data) = @_;
+    croak "invalid data" unless $data and 'HASH' eq ref $data;
+    croak "name is required" unless defined $data->{name};
+    croak "flavorRef is required" unless defined $data->{flavorRef};
+    croak "imageRef is required" unless defined $data->{imageRef};
+    my $res = $self->_post("/servers", { server => $data });
     _check_res($res);
     return from_json($res->content)->{server};
 }
@@ -88,7 +78,17 @@ sub delete_server {
     my ($self, $id) = @_;
     my $req = HTTP::Request->new(DELETE => $self->_url("/servers/$id"));
     my $res = $self->_ua->request($req);
-    return $res->is_success;
+    return _check_res($res);
+}
+
+sub rebuild_server {
+    my ($self, $server, $data) = @_;
+    croak "server id is required" unless $server;
+    croak "invalid data" unless $data and 'HASH' eq ref $data;
+    croak "imageRef is required" unless $data->{imageRef};
+    my $res = $self->_post("/servers/$server/action", { rebuild => $data });
+    _check_res($res);
+    return from_json($res->content)->{server};
 }
 
 sub get_images {
@@ -104,32 +104,19 @@ sub get_image {
 }
 
 sub create_image {
-    my ($self, %params) = @_;
-    my ($name, $server, $meta) = @params{qw(name server meta)};
-    croak "name param is required"   unless defined $name;
-    croak "server param is required" unless defined $server;
-    croak "meta param must be a hashref" if $meta and ! ref($meta) == 'HASH';
-    $meta ||= {};
-
-    my $res = $self->_ua->post($self->_url("/servers/$server/action"),
-        content_type => 'application/json',
-        Content => to_json({
-            createImage => {
-                name     => $name,
-                metadata => $meta,
-            }
-        }),
-    );
-    _check_res($res);
-    return 1;
+    my ($self, $server, $data) = @_;
+    croak "server id is required" unless defined $server;
+    croak "invalid data" unless $data and 'HASH' eq ref $data;
+    croak "name is required" unless defined $data->{name};
+    my $res = $self->_post("/servers/$server/action", { createImage => $data });
+    return _check_res($res);
 }
 
 sub delete_image {
     my ($self, $id) = @_;
     my $req = HTTP::Request->new(DELETE => $self->_url("/images/$id"));
     my $res = $self->_ua->request($req);
-    _check_res($res);
-    return 1;
+    return _check_res($res);
 }
 
 sub get_flavors {
@@ -151,7 +138,16 @@ sub _url {
     return $url;
 }
 
-sub _check_res { croak $_[0]->content unless $_[0]->is_success }
+sub _check_res { croak $_[0]->content unless $_[0]->is_success; return 1; }
+
+sub _post {
+    my ($self, $url, $data) = @_;
+    return $self->_ua->post(
+        $self->_url($url),
+        content_type => 'application/json',
+        content      => to_json($data),
+    );
+}
 
 # ABSTRACT: Bindings for the OpenStack Compute API.
 
@@ -174,11 +170,23 @@ Also see the L<oscompute> command line tool.
 
 =head1 METHODS
 
+Methods that take a hashref data param generally expect the corresponding
+data format as defined by the OpenStack API JSON request objects.
+See the
+L<OpenStack Docs|http://docs.openstack.org/api/openstack-compute/1.1/content>
+for more information.
+Methods that return a single resource will return false if the resource is not
+found.
+Methods that return an arrayref of resources will return an empty arrayref if
+the list is empty.
+Methods that create, modify, or delete resources will throw an exception on
+failure.
+
 =head2 get_server
 
     get_server($id)
 
-Returns the server with the given id or undef if it doesn't exist.
+Returns the server with the given id or false if it doesn't exist.
 
 =head2 get_servers
 
@@ -192,40 +200,63 @@ Returns an arrayref of all the servers.
     get_servers_by_name($name)
 
 Returns an arrayref of servers with the given name.
+Returns an empty arrayref if there are no such servers.
 
 =head2 create_server
 
-    create_server(name => $name, flavor => $flavor, image => $image)
+    create_server({ name => $name, flavorRef => $flavor, imageRef => $img_id })
+
+Returns a server hashref.
 
 =head2 delete_server
 
     delete_server($id)
 
+Returns true on success.
+
+=head2 rebuild_server
+
+    rebuild_server($server_id, { imageRef => $img_id })
+
+Returns a server hashref.
+
 =head2 get_image
 
     get_image($id)
+
+Returns an image hashref.
 
 =head2 get_images
 
     get_images()
     get_images(detail => 1) # Detail defaults to 0.
 
+Returns an arrayref of all the servers.
+
 =head2 create_image
 
-    create_image(name => $name, server => $server_id)
+    create_image($server_id, { name => 'bob' })
+
+Returns an image hashref.
 
 =head2 delete_image
 
     delete_image($id)
 
+Returns true on success.
+
 =head2 get_flavor
 
     get_flavor($id)
+
+Returns a flavor hashref.
 
 =head2 get_flavors
 
     get_flavors()
     get_flavors(detail => 1) # Detail defaults to 0.
+
+Returns an arrayref of all the flavors.
 
 =head2 token
 
@@ -245,6 +276,8 @@ server after authenticating.
 =over
 
 =item L<oscompute>
+
+=item L<OpenStack Docs|http://docs.openstack.org/api/openstack-compute/1.1/content>
 
 =back
 
