@@ -28,6 +28,7 @@ Server commands:
     server create <name> <flavor> <image-id>
     server delete <server>
     server rebuild <server> <image-id>
+    server password <server> <new-password>
 
 Image commands:
 
@@ -69,16 +70,15 @@ sub server {
     my @args = @{$c->argv};
     my $sub_cmd = shift @args;
     given ($sub_cmd) {
-        when (undef)  { return _get_servers($c) }
-        when ('list') { return _get_servers($c) }
-        when ('show') {
+        when ([undef, 'list']) { return _get_servers($c) }
+        when ([qw(show s)]) {
             die "Usage: $0 server show <server>\n" unless @args == 1;
             my $id = $args[0];
             my $s = _get_server($c, $id);
             return _to_json($s) if $c->options->{verbose};
             return _format_servers($s);
         }
-        when ('create') {
+        when ([qw(create c)]) {
             die "Usage: $0 server create <name> <flavor> <image>\n"
                 unless @args == 3;
             my ($name, $flavor, $image) = @args;
@@ -87,7 +87,7 @@ sub server {
             return _to_json($s) if $c->options->{verbose};
             return "Creating server $s->{id} with password $s->{adminPass}";
         }
-        when ('delete') {
+        when ([qw(delete d rm)]) {
             die "Usage: $0 server delete <server>\n" unless @args == 1;
             my ($id) = @args;
             my $s = _get_server($c, $id);
@@ -103,6 +103,14 @@ sub server {
             return _to_json($s) if $c->options->{verbose};
             return "Server $server_id is rebuilding.";
         }
+        when ([qw(password pass p)]) {
+            die "Usage: $0 server password <server> <password>\n"
+                unless @args == 2;
+            my ($server_id, $password) = @args;
+            my $s = _get_server($c, $server_id);
+            $compute->set_password($s->{id}, $password);
+            return "Changing password for $server_id to '$password'.";
+        }
         default {
             die "Supported server commands are list, show, create and delete."
                 . "\n";
@@ -116,23 +124,22 @@ sub image {
     my @args = @{$c->argv};
     my $sub_cmd = shift @args;
     given ($sub_cmd) {
-        when (undef)  { return _get_images($c) }
-        when ('list') { return _get_images($c) }
-        when ('show') {
+        when ([undef, 'list']) { return _get_images($c) }
+        when ([qw(show s)]) {
             die "Usage: $0 image show <id>\n" unless @args == 1;
             my $img = $compute->get_image($args[0]);
             return _to_json($img) if $c->options->{verbose};
             return 'No such image' unless $img;
             return _format_images($img);
         }
-        when ('create') {
+        when ([qw(create c)]) {
             die "Usage: $0 image create <name> <server>\n" unless @args == 2;
             my ($name, $server) = @args;
             my $s = _get_server($c, $server);
             $compute->create_image($s->{id}, { name => $name });
             return "Snapshot of server $server has been scheduled.";
         }
-        when ('delete') {
+        when ([qw(delete d rm)]) {
             die "Usage: $0 image delete <id>\n" unless @args == 1;
             my ($id) = @args;
             $compute->delete_image($id);
@@ -150,9 +157,8 @@ sub flavor {
     my @args = @{$c->argv};
     my $sub_cmd = shift @args;
     given ($sub_cmd) {
-        when (undef)  { return _get_flavors($c) }
-        when ('list') { return _get_flavors($c) }
-        when ('show') {
+        when ([undef, 'list']) { return _get_flavors($c) }
+        when ([qw(show s)]) {
             die "Usage: $0 flavor show <id>\n" unless @args == 1;
             my $flavor = $compute->get_flavor($args[0]);
             die "No such flavor\n" unless $flavor;
@@ -250,6 +256,7 @@ sub _to_json {
         server create <name> <flavor> <image-id>
         server delete <server>
         server rebuild <server> <image-id>
+        server password <server> <new-password>
 
     Image commands:
 

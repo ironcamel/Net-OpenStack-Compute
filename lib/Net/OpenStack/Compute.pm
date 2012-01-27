@@ -86,9 +86,18 @@ sub rebuild_server {
     croak "server id is required" unless $server;
     croak "invalid data" unless $data and 'HASH' eq ref $data;
     croak "imageRef is required" unless $data->{imageRef};
-    my $res = $self->_post("/servers/$server/action", { rebuild => $data });
+    my $res = $self->_action($server, rebuild => $data);
     _check_res($res);
     return from_json($res->content)->{server};
+}
+
+sub set_password {
+    my ($self, $server, $password) = @_;
+    croak "server id is required" unless $server;
+    croak "password id is required" unless defined $password;
+    my $res = $self->_action($server,
+        changePassword => { adminPass => $password });
+    return _check_res($res);
 }
 
 sub get_images {
@@ -108,7 +117,7 @@ sub create_image {
     croak "server id is required" unless defined $server;
     croak "invalid data" unless $data and 'HASH' eq ref $data;
     croak "name is required" unless defined $data->{name};
-    my $res = $self->_post("/servers/$server/action", { createImage => $data });
+    my $res = $self->_action($server, createImage => $data);
     return _check_res($res);
 }
 
@@ -147,6 +156,11 @@ sub _post {
         content_type => 'application/json',
         content      => to_json($data),
     );
+}
+
+sub _action {
+    my ($self, $server, $action, $data) = @_;
+    return $self->_post("/servers/$server/action", { $action => $data });
 }
 
 # ABSTRACT: Bindings for the OpenStack Compute API.
@@ -219,6 +233,12 @@ Returns true on success.
     rebuild_server($server_id, { imageRef => $img_id })
 
 Returns a server hashref.
+
+=head2 set_password
+
+    set_password($server_id, $new_password)
+
+Returns true on success.
 
 =head2 get_image
 
