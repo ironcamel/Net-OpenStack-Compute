@@ -1,5 +1,8 @@
 Revision history for Net-OpenStack-Compute
 
+1.0601  2012-02-13
+        Unicode output no longer issues a warning.
+
 1.0600  2012-01-27
         Added support for setting server's admin password.
         Added aliases for subcommands in oscompute.
