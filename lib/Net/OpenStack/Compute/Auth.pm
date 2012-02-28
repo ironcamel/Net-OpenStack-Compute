@@ -1,15 +1,19 @@
 package Net::OpenStack::Compute::Auth;
 use Any::Moose;
 
+#use Data::Dumper;
 use JSON qw(from_json to_json);
 use LWP;
 
-has auth_url   => (is => 'rw', isa => 'Str', required => 1);
-has user       => (is => 'ro', isa => 'Str', required => 1);
-has password   => (is => 'ro', isa => 'Str', required => 1);
-has project_id => (is => 'ro', isa => 'Str', required => 1);
-has region     => (is => 'ro');
-has _store     => (is => 'ro', lazy => 1, builder => '_build_store');
+has auth_url     => (is => 'rw', required => 1);
+has user         => (is => 'ro', required => 1);
+has password     => (is => 'ro', required => 1);
+has project_id   => (is => 'ro');
+has region       => (is => 'ro');
+has service_name => (is => 'ro');
+has is_rax_auth  => (is => 'ro', isa => 'Bool'); # Rackspace auth
+
+has _store => (is => 'ro', lazy => 1, builder => '_build_store');
 
 has base_url => (
     is => 'ro',
@@ -36,7 +40,9 @@ sub _build_store {
     my $auth_url = $self->auth_url;
     my ($version) = $auth_url =~ /(v\d\.\d)$/;
     die "Could not determine version from url [$auth_url]" unless $version;
-    return $version eq 'v1.1' ? $self->auth_basic() : $self->auth_keystone();
+    return $self->auth_rax() if $self->is_rax_auth;
+    return $self->auth_basic() if $version lt 'v2';
+    return $self->auth_keystone();
 }
 
 sub auth_basic {
@@ -47,7 +53,6 @@ sub auth_basic {
         x_auth_key        => $self->password,
         x_auth_project_id => $self->project_id,
     );
-    #say $res->headers->as_string;
     die $res->status_line . "\n" . $res->content unless $res->is_success;
 
     return {
@@ -58,8 +63,7 @@ sub auth_basic {
 
 sub auth_keystone {
     my ($self) = @_;
-    my $ua = LWP::UserAgent->new();
-    my $auth_data = {
+    return $self->_parse_catalog({
         auth =>  {
             tenantName => $self->project_id,
             passwordCredentials => {
@@ -67,28 +71,49 @@ sub auth_keystone {
                 password => $self->password,
             }
         }
-    };
+    });
+}
 
+sub auth_rax {
+    my ($self) = @_;
+    return $self->_parse_catalog({
+        auth =>  {
+            'RAX-KSKEY:apiKeyCredentials' => {
+                apiKey   => $self->password,
+                username => $self->user,
+            }
+        }
+    });
+}
+
+sub _parse_catalog {
+    my ($self, $auth_data) = @_;
+    my $ua = LWP::UserAgent->new();
     my $res = $ua->post($self->auth_url . "/tokens",
-        content_type => 'application/json', Content => to_json($auth_data));
-    
+        content_type => 'application/json', content => to_json($auth_data));
     die $res->status_line . "\n" . $res->content unless $res->is_success;
     my $data = from_json($res->content);
     my $token = $data->{access}{token}{id};
 
-    my ($catalog) =
-        grep { $_->{type} eq 'compute' } @{$data->{access}{serviceCatalog}};
-    die "No compute service catalog found" unless $catalog;
-
+    my @catalog = @{ $data->{access}{serviceCatalog} };
+    @catalog = grep { $_->{type} eq 'compute' } @catalog;
+    die "No compute catalog found" unless @catalog;
+    if ($self->service_name) {
+        @catalog = grep { $_->{name} eq $self->service_name } @catalog;
+        die "No catalog found named " . $self->service_name unless @catalog;
+    }
+    my $catalog = $catalog[0];
     my $base_url = $catalog->{endpoints}[0]{publicURL};
     if ($self->region) {
         for my $endpoint (@{ $catalog->{endpoints} }) {
-            if ($endpoint->{region} eq $self->region) {
+            my $region = $endpoint->{region} or next;
+            if ($region eq $self->region) {
                 $base_url = $endpoint->{publicURL};
                 last;
             }
         }
     }
+
     return { base_url => $base_url, token => $token };
 }
 

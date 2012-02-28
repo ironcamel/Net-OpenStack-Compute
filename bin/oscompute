@@ -55,11 +55,13 @@ EOD
         unless $ENV{NOVA_PASSWORD} || $ENV{NOVA_API_KEY};
 
     $c->stash->{compute} = Net::OpenStack::Compute->new(
-        auth_url   => $ENV{NOVA_URL},
-        user       => $ENV{NOVA_USERNAME},
-        password   => $ENV{NOVA_PASSWORD} || $ENV{NOVA_API_KEY},
-        project_id => $ENV{NOVA_PROJECT_ID},
-        region     => $ENV{NOVA_REGION_NAME},
+        auth_url     => $ENV{NOVA_URL},
+        user         => $ENV{NOVA_USERNAME},
+        password     => $ENV{NOVA_PASSWORD} || $ENV{NOVA_API_KEY},
+        project_id   => $ENV{NOVA_PROJECT_ID},
+        region       => $ENV{NOVA_REGION_NAME},
+        service_name => $ENV{NOVA_SERVICE_NAME},
+        is_rax_auth  => $ENV{NOVA_RAX_AUTH},
     );
     $c->getopt('verbose|v');
 }
