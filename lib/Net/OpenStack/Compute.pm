@@ -83,6 +83,24 @@ sub rebuild_server {
     return from_json($res->content)->{server};
 }
 
+sub resize_server {
+    my ($self, $server, $data) = @_;
+    croak "server id is required" unless $server;
+    croak "invalid data" unless $data and 'HASH' eq ref $data;
+    croak "flavorRef is required" unless $data->{flavorRef};
+    my $res = $self->_action($server, resize => $data);
+    return _check_res($res);
+}
+
+sub reboot_server {
+    my ($self, $server, $data) = @_;
+    croak "server id is required" unless $server;
+    croak "invalid data" unless $data and 'HASH' eq ref $data;
+    croak "reboot type is required" unless $data->{type};
+    my $res = $self->_action($server, reboot => $data);
+    return _check_res($res);
+}
+
 sub set_password {
     my ($self, $server, $password) = @_;
     croak "server id is required" unless $server;

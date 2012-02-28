@@ -8,6 +8,7 @@ use JSON qw(from_json to_json);
 use LWP;
 use Net::OpenStack::Compute;
 
+# Need to set this for App::Rad which prints to STDOUT
 binmode STDOUT, ':encoding(UTF-8)';
 
 sub setup {
@@ -30,6 +31,8 @@ Server commands:
     server create <name> <flavor> <image-id>
     server delete <server>
     server rebuild <server> <image-id>
+    server resize <server> <flavor-id>
+    server reboot <server> [soft|hard]
     server password <server> <new-password>
 
 Image commands:
@@ -106,6 +109,22 @@ sub server {
             $s = $compute->rebuild_server($s->{id}, { imageRef => $image_id });
             return _to_json($s) if $c->options->{verbose};
             return "Server $server_id is rebuilding.";
+        }
+        when ('resize') {
+            die "Usage: $0 server resize <server> <flavor-id>\n"
+                unless @args == 2;
+            my ($server_id, $flavor_id) = @args;
+            my $s = _get_server($c, $server_id);
+            $compute->resize_server($s->{id}, { flavorRef => $flavor_id });
+            return "Server $server_id is resizing.";
+        }
+        when ('reboot') {
+            die "Usage: $0 server reboot <server> [soft|hard]\n" unless @args;
+            my ($server_id, $type) = @args;
+            $type ||= 'SOFT';
+            my $s = _get_server($c, $server_id);
+            $compute->reboot_server($s->{id}, { type => $type });
+            return "Server $server_id is rebooting.";
         }
         when ([qw(password pass p)]) {
             die "Usage: $0 server password <server> <password>\n"
@@ -260,6 +279,8 @@ sub _to_json {
         server create <name> <flavor> <image-id>
         server delete <server>
         server rebuild <server> <image-id>
+        server resize <server> <flavor-id>
+        server reboot <server> [soft|hard]
         server password <server> <new-password>
 
     Image commands:
