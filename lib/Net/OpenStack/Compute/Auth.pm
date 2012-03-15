@@ -6,18 +6,18 @@ with 'Net::OpenStack::Compute::AuthRole';
 use JSON qw(from_json to_json);
 use LWP;
 
-has _store => (is => 'ro', lazy => 1, builder => '_build_store');
+has _info => (is => 'ro', lazy => 1, builder => '_build_info');
 
 has base_url => (
     is => 'ro',
     lazy => 1,
-    default => sub { shift->_store->{base_url} },
+    default => sub { shift->_info->{base_url} },
 );
 
 has token => (
-    is => 'ro',
-    lazy => 1,
-    default => sub { shift->_store->{token} },
+    is      => 'ro',
+    lazy    => 1,
+    default => sub { shift->_info->{token} },
 );
 
 sub BUILD {
@@ -28,7 +28,7 @@ sub BUILD {
     $self->auth_url($auth_url);
 }
 
-sub _build_store {
+sub _build_info {
     my ($self) = @_;
     my $auth_url = $self->auth_url;
     my ($version) = $auth_url =~ /(v\d\.\d)$/;
@@ -38,10 +38,20 @@ sub _build_store {
     return $self->auth_keystone();
 }
 
+has _ua => (
+    is => 'ro',
+    lazy => 1,
+    default => sub {
+        my $self = shift;
+        my $agent = LWP::UserAgent->new(
+            ssl_opts => { verify_hostname => $self->verify_ssl });
+        return $agent;
+    },
+);
+
 sub auth_basic {
     my ($self) = @_;
-    my $ua = LWP::UserAgent->new();
-    my $res = $ua->get($self->auth_url,
+    my $res = $self->_ua->get($self->auth_url,
         x_auth_user       => $self->user,
         x_auth_key        => $self->password,
         x_auth_project_id => $self->project_id,
@@ -81,8 +91,7 @@ sub auth_rax {
 
 sub _parse_catalog {
     my ($self, $auth_data) = @_;
-    my $ua = LWP::UserAgent->new();
-    my $res = $ua->post($self->auth_url . "/tokens",
+    my $res = $self->_ua->post($self->auth_url . "/tokens",
         content_type => 'application/json', content => to_json($auth_data));
     die $res->status_line . "\n" . $res->content unless $res->is_success;
     my $data = from_json($res->content);

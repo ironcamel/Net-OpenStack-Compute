@@ -18,7 +18,7 @@ has _auth => (
         my $self = shift;
         return Net::OpenStack::Compute::Auth->new(
             map { $_, $self->$_ } qw(auth_url user password project_id region
-                service_name is_rax_auth)
+                service_name is_rax_auth verify_ssl)
         );
     },
     handles => [qw(base_url token)],
@@ -29,15 +29,24 @@ has _ua => (
     lazy => 1,
     default => sub {
         my $self = shift;
-        my $agent = LWP::UserAgent->new();
+        my $agent = LWP::UserAgent->new(
+            ssl_opts => { verify_hostname => $self->verify_ssl });
         $agent->default_header(x_auth_token => $self->token);
         return $agent;
     },
 );
 
+sub _get_query {
+    my %params = @_;
+    my $q = $params{query} or return '';
+    for ($q) { s/^/?/ unless /^\?/ }
+    return $q;
+};
+
 sub get_servers {
     my ($self, %params) = @_;
-    my $res = $self->_ua->get($self->_url('/servers', $params{detail}));
+    my $q = _get_query(%params);
+    my $res = $self->_ua->get($self->_url("/servers", $params{detail}, $q));
     return from_json($res->content)->{servers};
 }
 
@@ -112,7 +121,8 @@ sub set_password {
 
 sub get_images {
     my ($self, %params) = @_;
-    my $res = $self->_ua->get($self->_url('/images', $params{detail}));
+    my $q = _get_query(%params);
+    my $res = $self->_ua->get($self->_url("/images", $params{detail}, $q));
     return from_json($res->content)->{images};
 }
 
@@ -140,7 +150,8 @@ sub delete_image {
 
 sub get_flavors {
     my ($self, %params) = @_;
-    my $res = $self->_ua->get($self->_url('/flavors', $params{detail}));
+    my $q = _get_query(%params);
+    my $res = $self->_ua->get($self->_url('/flavors', $params{detail}, $q));
     return from_json($res->content)->{flavors};
 }
 
@@ -151,9 +162,10 @@ sub get_flavor {
 }
 
 sub _url {
-    my ($self, $path, $is_detail) = @_;
+    my ($self, $path, $is_detail, $query) = @_;
     my $url = $self->base_url . $path;
     $url .= '/detail' if $is_detail;
+    $url .= $query if $query;
     return $url;
 }
 
@@ -179,11 +191,15 @@ sub _action {
 
     use Net::OpenStack::Compute;
     my $compute = Net::OpenStack::Compute->new(
-        auth_url   => $auth_url,
-        user       => $user,
-        password   => $password,
-        project_id => $project_id,
-        region     => $region, # Optional
+        auth_url     => $auth_url,
+        user         => $user,
+        password     => $password,
+        project_id   => $project_id,
+        # Optional:
+        region       => $ENV{NOVA_REGION_NAME},
+        service_name => $ENV{NOVA_SERVICE_NAME},
+        is_rax_auth  => $ENV{NOVA_RAX_AUTH},
+        verify_ssl   => 0, 
     );
     $compute->create_server(name => 's1', flavor => $flav_id, image => $img_id);
 
@@ -214,8 +230,21 @@ Returns the server with the given id or false if it doesn't exist.
 
 =head2 get_servers
 
-    get_servers()
-    get_servers(detail => 1) # Detail defaults to 0.
+    get_servers(%params)
+
+params:
+
+=over
+
+=item detail
+
+Optional. Defaults to 0.
+
+=item query
+
+Optional query string to be appended to requests.
+
+=back
 
 Returns an arrayref of all the servers.
 
@@ -259,9 +288,22 @@ Returns an image hashref.
 =head2 get_images
 
     get_images()
-    get_images(detail => 1) # Detail defaults to 0.
 
-Returns an arrayref of all the servers.
+params:
+
+=over
+
+=item detail
+
+Optional. Defaults to 0.
+
+=item query
+
+Optional query string to be appended to requests.
+
+=back
+
+Returns an arrayref of all the images.
 
 =head2 create_image
 
@@ -284,7 +326,20 @@ Returns a flavor hashref.
 =head2 get_flavors
 
     get_flavors()
-    get_flavors(detail => 1) # Detail defaults to 0.
+
+params:
+
+=over
+
+=item detail
+
+Optional. Defaults to 0.
+
+=item query
+
+Optional query string to be appended to requests.
+
+=back
 
 Returns an arrayref of all the flavors.
 

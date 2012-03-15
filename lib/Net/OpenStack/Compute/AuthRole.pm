@@ -8,5 +8,6 @@ has project_id   => (is => 'ro');
 has region       => (is => 'ro');
 has service_name => (is => 'ro');
 has is_rax_auth  => (is => 'ro', isa => 'Bool'); # Rackspace auth
+has verify_ssl   => (is => 'ro', isa => 'Bool', default => 1);
 
 1;

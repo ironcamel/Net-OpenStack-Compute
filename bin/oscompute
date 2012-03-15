@@ -25,7 +25,6 @@ sub setup {
     $c->more_help(<<EOD);
     
 Server commands:
-
     server [list]
     server show <server>
     server create <name> <flavor> <image-id>
@@ -36,16 +35,19 @@ Server commands:
     server password <server> <new-password>
 
 Image commands:
-
     image [list]
     image show <image-id>
     image create <name> <server>
     image delete <image-id>
 
 Flavor commands:
-
     flavor [list]
     flavor show <flavor-id>
+
+Options:
+    --verbose|v   causes output to contain all info returned from the server
+    --insecure    turns off ssl verification
+    --query|q     provide a query string to append to your request
 
 Notes:
     Any <server> param can be a server id or a server name.
@@ -57,6 +59,7 @@ EOD
     die sprintf($msg, 'NOVA_PASSWORD or NOVA_API_KEY')
         unless $ENV{NOVA_PASSWORD} || $ENV{NOVA_API_KEY};
 
+    $c->getopt('verbose|v', 'insecure', 'query|q=s');
     $c->stash->{compute} = Net::OpenStack::Compute->new(
         auth_url     => $ENV{NOVA_URL},
         user         => $ENV{NOVA_USERNAME},
@@ -65,8 +68,8 @@ EOD
         region       => $ENV{NOVA_REGION_NAME},
         service_name => $ENV{NOVA_SERVICE_NAME},
         is_rax_auth  => $ENV{NOVA_RAX_AUTH},
+        verify_ssl   => ! $c->options->{insecure},
     );
-    $c->getopt('verbose|v');
 }
 
 App::Rad->run();
@@ -207,7 +210,8 @@ sub _get_server {
 sub _get_servers {
     my $c = shift;
     my $compute = $c->stash->{compute};
-    my $servers = $compute->get_servers(detail => 1);
+    my $q = $c->options->{query};
+    my $servers = $compute->get_servers(detail => 1, query => $q);
     return _to_json($servers) if $c->options->{verbose};
     return _format_servers(@$servers);
 }
@@ -215,7 +219,8 @@ sub _get_servers {
 sub _get_images {
     my $c = shift;
     my $compute = $c->stash->{compute};
-    my $images = $compute->get_images(detail => 1);
+    my $q = $c->options->{query};
+    my $images = $compute->get_images(detail => 1, query => $q);
     return _to_json($images) if $c->options->{verbose};
     return _format_images(@$images);
 }
@@ -223,7 +228,8 @@ sub _get_images {
 sub _get_flavors {
     my $c = shift;
     my $compute = $c->stash->{compute};
-    my $flavors = $compute->get_flavors(detail => 1);
+    my $q = $c->options->{query};
+    my $flavors = $compute->get_flavors(detail => 1, query => $q);
     return _to_json($flavors) if $c->options->{verbose};
     return _format_flavors(@$flavors);
 }
@@ -260,7 +266,6 @@ sub _to_json {
 
 =head1 SYNOPSIS
 
-
     Usage: oscompute command [arguments]
 
     Available Commands:
@@ -273,7 +278,6 @@ sub _to_json {
         server      perform server actions
 
     Server commands:
-
         server [list]
         server show <server>
         server create <name> <flavor> <image-id>
@@ -284,19 +288,21 @@ sub _to_json {
         server password <server> <new-password>
 
     Image commands:
-
         image [list]
         image show <image-id>
         image create <name> <server>
         image delete <image-id>
 
     Flavor commands:
-
         flavor [list]
         flavor show <flavor-id>
 
-    Notes:
+    Options:
+        --verbose|v   causes output to contain all info returned from the server
+        --insecure    turns off ssl verification
+        --query|q     provide a query string to append to your request
 
+    Notes:
         Any <server> param can be a server id or a server name.
 
     Examples:
@@ -333,7 +339,7 @@ sub _to_json {
     oscompute image list
 
     # Create a snapshot image of a given server.
-    oscompute image create myimg ec05b52e-f575-469c-a91e-7f0ddd4fab95
+    oscompute image create new-img-name bob
 
 =head1 DESCRIPTION
 
