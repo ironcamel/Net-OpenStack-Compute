@@ -46,14 +46,14 @@ sub _get_query {
 sub get_servers {
     my ($self, %params) = @_;
     my $q = _get_query(%params);
-    my $res = $self->_ua->get($self->_url("/servers", $params{detail}, $q));
+    my $res = $self->_get($self->_url("/servers", $params{detail}, $q));
     return from_json($res->content)->{servers};
 }
 
 sub get_server {
     my ($self, $id) = @_;
     croak "Invalid server id" unless $id;
-    my $res = $self->_ua->get($self->_url("/servers/$id"));
+    my $res = $self->_get($self->_url("/servers/$id"));
     return undef unless $res->is_success;
     return from_json($res->content)->{server};
 }
@@ -71,15 +71,13 @@ sub create_server {
     croak "flavorRef is required" unless defined $data->{flavorRef};
     croak "imageRef is required" unless defined $data->{imageRef};
     my $res = $self->_post("/servers", { server => $data });
-    _check_res($res);
     return from_json($res->content)->{server};
 }
 
 sub delete_server {
     my ($self, $id) = @_;
-    my $req = HTTP::Request->new(DELETE => $self->_url("/servers/$id"));
-    my $res = $self->_ua->request($req);
-    return _check_res($res);
+    $self->_delete($self->_url("/servers/$id"));
+    return 1;
 }
 
 sub rebuild_server {
@@ -122,13 +120,14 @@ sub set_password {
 sub get_images {
     my ($self, %params) = @_;
     my $q = _get_query(%params);
-    my $res = $self->_ua->get($self->_url("/images", $params{detail}, $q));
+    my $res = $self->_get($self->_url("/images", $params{detail}, $q));
     return from_json($res->content)->{images};
 }
 
 sub get_image {
     my ($self, $id) = @_;
-    my $res = $self->_ua->get($self->_url("/images/$id"));
+    my $res = $self->_get($self->_url("/images/$id"));
+    return undef unless $res->is_success;
     return from_json($res->content)->{image};
 }
 
@@ -143,21 +142,21 @@ sub create_image {
 
 sub delete_image {
     my ($self, $id) = @_;
-    my $req = HTTP::Request->new(DELETE => $self->_url("/images/$id"));
-    my $res = $self->_ua->request($req);
-    return _check_res($res);
+    $self->_delete($self->_url("/images/$id"));
+    return 1;
 }
 
 sub get_flavors {
     my ($self, %params) = @_;
     my $q = _get_query(%params);
-    my $res = $self->_ua->get($self->_url('/flavors', $params{detail}, $q));
+    my $res = $self->_get($self->_url('/flavors', $params{detail}, $q));
     return from_json($res->content)->{flavors};
 }
 
 sub get_flavor {
     my ($self, $id) = @_;
-    my $res = $self->_ua->get($self->_url("/flavors/$id"));
+    my $res = $self->_get($self->_url("/flavors/$id"));
+    return undef unless $res->is_success;
     return from_json($res->content)->{flavor};
 }
 
@@ -169,7 +168,10 @@ sub _url {
     return $url;
 }
 
-sub _check_res { croak $_[0]->content unless $_[0]->is_success; return 1; }
+sub _get {
+    my ($self, $url) = @_;
+    return $self->_ua->get($url);
+}
 
 sub _post {
     my ($self, $url, $data) = @_;
@@ -180,10 +182,32 @@ sub _post {
     );
 }
 
+sub _delete {
+    my ($self, $url) = @_;
+    print "_delete $url\n";
+    my $req = HTTP::Request->new(DELETE => $url);
+    return $self->_ua->request($req);
+}
+
 sub _action {
     my ($self, $server, $action, $data) = @_;
     return $self->_post("/servers/$server/action", { $action => $data });
 }
+
+sub _check_res {
+    my ($res) = @_;
+    die $res->status_line . "\n" . $res->content
+        if ! $res->is_success and $res->code != 404;
+    return 1;
+}
+
+around [qw( _get _post _delete )] => sub {
+    my $orig = shift;
+    my $self = shift;
+    my $res = $self->$orig(@_);
+    _check_res($res);
+    return $res;
+};
 
 # ABSTRACT: Bindings for the OpenStack Compute API.
 
@@ -287,7 +311,7 @@ Returns an image hashref.
 
 =head2 get_images
 
-    get_images()
+    get_images(%params)
 
 params:
 
@@ -325,7 +349,7 @@ Returns a flavor hashref.
 
 =head2 get_flavors
 
-    get_flavors()
+    get_flavors(%params)
 
 params:
 

@@ -1,5 +1,8 @@
 Revision history for Net-OpenStack-Compute
 
+1.0802  2012-03-16
+        Stopped ignoring error responses for GETs.
+
 1.0801  2012-03-15
         Minor POD documentation updates.
 
