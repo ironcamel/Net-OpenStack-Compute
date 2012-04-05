@@ -1,5 +1,8 @@
 Revision history for Net-OpenStack-Compute
 
+1.0900  2012-04-05
+        Added support for OSCOMPUTE_INSECURE option.
+
 1.0802  2012-03-16
         Stopped ignoring error responses for GETs.
 
