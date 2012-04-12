@@ -1,5 +1,10 @@
 Revision history for Net-OpenStack-Compute
 
+1.1000  2012-04-12
+        Added new_from_env constructor.
+        Refactored auth logic into a role.
+        Converted to Moo from Any::Moose.
+
 1.0900  2012-04-05
         Added support for OSCOMPUTE_INSECURE option.
 

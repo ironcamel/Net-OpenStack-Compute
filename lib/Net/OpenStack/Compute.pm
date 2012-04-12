@@ -1,6 +1,5 @@
 package Net::OpenStack::Compute;
-use Any::Moose;
-with 'Net::OpenStack::Compute::AuthRole';
+use Moo;
 
 # VERSION
 
@@ -8,33 +7,78 @@ use Carp;
 use HTTP::Request;
 use JSON qw(from_json to_json);
 use LWP;
-use Net::OpenStack::Compute::Auth;
+#use Net::OpenStack::Compute::Auth;
 
-has _auth => (
-    is   => 'rw',
-    isa  => 'Net::OpenStack::Compute::Auth',
-    lazy => 1,
-    default => sub {
-        my $self = shift;
-        return Net::OpenStack::Compute::Auth->new(
-            map { $_, $self->$_ } qw(auth_url user password project_id region
-                service_name is_rax_auth verify_ssl)
-        );
-    },
-    handles => [qw(base_url token)],
+has auth_url     => (is => 'rw', required => 1);
+has user         => (is => 'ro', required => 1);
+has password     => (is => 'ro', required => 1);
+has project_id   => (is => 'ro');
+has region       => (is => 'ro');
+has service_name => (is => 'ro');
+has is_rax_auth  => (is => 'ro');
+has verify_ssl   => (is => 'ro', default => ! $ENV{OSCOMPUTE_INSECURE});
+
+has base_url => (
+    is      => 'ro',
+    lazy    => 1,
+    default => sub { shift->_auth_info->{base_url} },
 );
+has token => (
+    is      => 'ro',
+    lazy    => 1,
+    default => sub { shift->_auth_info->{token} },
+);
+has _auth_info => (is => 'ro', lazy => 1, builder => '_build_auth_info');
 
-has _ua => (
+has _agent => (
     is => 'ro',
     lazy => 1,
     default => sub {
         my $self = shift;
         my $agent = LWP::UserAgent->new(
             ssl_opts => { verify_hostname => $self->verify_ssl });
-        $agent->default_header(x_auth_token => $self->token);
         return $agent;
     },
 );
+
+with 'Net::OpenStack::Compute::AuthRole';
+
+sub new_from_env {
+    my ($self, %params) = @_;
+    my $msg = "%s env var is required. Did you forget to source novarc?\n";
+    die sprintf($msg, 'NOVA_URL or OS_AUTH_URL')
+        unless $ENV{NOVA_URL} || $ENV{OS_AUTH_URL};
+    die sprintf($msg, 'NOVA_USERNAME or OS_USERNAME')
+        unless $ENV{NOVA_USERNAME} || $ENV{OS_USERNAME};
+    die sprintf($msg, 'NOVA_PASSWORD or NOVA_API_KEY or OS_PASSWORD')
+        unless $ENV{NOVA_PASSWORD} || $ENV{NOVA_API_KEY} || $ENV{OS_PASSWORD};
+    my %env = (
+        auth_url     => $ENV{NOVA_URL}         || $ENV{OS_AUTH_URL},
+        user         => $ENV{NOVA_USERNAME}    || $ENV{OS_USERNAME},
+        password     => $ENV{NOVA_PASSWORD}    || $ENV{NOVA_API_KEY}
+                                               || $ENV{OS_PASSWORD},
+        project_id   => $ENV{NOVA_PROJECT_ID}  || $ENV{OS_TENANT_NAME},
+        region       => $ENV{NOVA_REGION_NAME} || $ENV{OS_AUTH_REGION},
+        service_name => $ENV{NOVA_SERVICE_NAME},
+        is_rax_auth  => $ENV{NOVA_RAX_AUTH},
+    );
+    return Net::OpenStack::Compute->new(%env, %params);
+}
+
+sub BUILD {
+    my ($self) = @_;
+    # Make sure trailing slashes are removed from auth_url
+    my $auth_url = $self->auth_url;
+    $auth_url =~ s|/+$||;
+    $self->auth_url($auth_url);
+}
+
+sub _build_auth_info {
+    my ($self) = @_;
+    my $auth_info = $self->get_auth_info();
+    $self->_agent->default_header(x_auth_token => $auth_info->{token});
+    return $auth_info;
+}
 
 sub _get_query {
     my %params = @_;
@@ -170,12 +214,12 @@ sub _url {
 
 sub _get {
     my ($self, $url) = @_;
-    return $self->_ua->get($url);
+    return $self->_agent->get($url);
 }
 
 sub _post {
     my ($self, $url, $data) = @_;
-    return $self->_ua->post(
+    return $self->_agent->post(
         $self->_url($url),
         content_type => 'application/json',
         content      => to_json($data),
@@ -184,9 +228,8 @@ sub _post {
 
 sub _delete {
     my ($self, $url) = @_;
-    print "_delete $url\n";
     my $req = HTTP::Request->new(DELETE => $url);
-    return $self->_ua->request($req);
+    return $self->_agent->request($req);
 }
 
 sub _action {

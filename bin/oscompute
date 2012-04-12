@@ -23,27 +23,11 @@ sub setup {
     $c->register(s => \&server, 'alias for server');
     $c->register(i => \&image, 'alias for image');
     $c->register(f => \&flavor, 'alias for flavor');
-    $c->more_help(_parse_pod());
-    
-    my $msg = "%s env var is missing. Did you forget to source novarc?\n";
-    die sprintf($msg, 'NOVA_URL or OS_AUTH_URL')
-        unless $ENV{NOVA_URL} || $ENV{OS_AUTH_URL};
-    die sprintf($msg, 'NOVA_USERNAME or OS_USERNAME')
-        unless $ENV{NOVA_USERNAME} || $ENV{OS_USERNAME};
-    die sprintf($msg, 'NOVA_PASSWORD or NOVA_API_KEY or OS_PASSWORD')
-        unless $ENV{NOVA_PASSWORD} || $ENV{NOVA_API_KEY} || $ENV{OS_PASSWORD};
 
+    $c->more_help(_parse_pod());
     $c->getopt('verbose|v', 'insecure', 'query|q=s');
-    $c->stash->{compute} = Net::OpenStack::Compute->new(
-        auth_url     => $ENV{NOVA_URL}         || $ENV{OS_AUTH_URL},
-        user         => $ENV{NOVA_USERNAME}    || $ENV{OS_USERNAME},
-        password     => $ENV{NOVA_PASSWORD}    || $ENV{NOVA_API_KEY}
-                                               || $ENV{OS_PASSWORD},
-        project_id   => $ENV{NOVA_PROJECT_ID}  || $ENV{OS_TENANT_NAME},
-        region       => $ENV{NOVA_REGION_NAME} || $ENV{OS_AUTH_REGION},
-        service_name => $ENV{NOVA_SERVICE_NAME},
-        is_rax_auth  => $ENV{NOVA_RAX_AUTH},
-        verify_ssl   => !($c->options->{insecure} || $ENV{OSCOMPUTE_INSECURE}),
+    $c->stash->{compute} = Net::OpenStack::Compute->new_from_env(
+        $c->options->{insecure} ? (verify_ssl => 0) : ()
     );
 }
 
