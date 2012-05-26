@@ -244,13 +244,18 @@ sub _check_res {
     return 1;
 }
 
-around [qw( _get _post _delete )] => sub {
+my $around_sub = sub {
     my $orig = shift;
     my $self = shift;
     my $res = $self->$orig(@_);
     _check_res($res);
     return $res;
 };
+
+
+for my $s (qw( _get _post _delete )) {
+    around $s => $around_sub;
+}
 
 # ABSTRACT: Bindings for the OpenStack Compute API.
 
