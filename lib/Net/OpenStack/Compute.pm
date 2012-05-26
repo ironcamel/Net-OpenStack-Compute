@@ -16,7 +16,7 @@ has project_id   => (is => 'ro');
 has region       => (is => 'ro');
 has service_name => (is => 'ro');
 has is_rax_auth  => (is => 'ro');
-has verify_ssl   => (is => 'ro', default => ! $ENV{OSCOMPUTE_INSECURE});
+has verify_ssl   => (is => 'ro', default => sub {! $ENV{OSCOMPUTE_INSECURE}});
 
 has base_url => (
     is      => 'ro',
