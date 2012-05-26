@@ -266,9 +266,9 @@ around [qw( _get _post _delete )] => sub {
         region       => $ENV{NOVA_REGION_NAME},
         service_name => $ENV{NOVA_SERVICE_NAME},
         is_rax_auth  => $ENV{NOVA_RAX_AUTH},
-        verify_ssl   => 0, 
+        verify_ssl   => 0,
     );
-    $compute->create_server(name => 's1', flavor => $flav_id, image => $img_id);
+    $compute->create_server({name => 's1', flavorRef => $flav_id, imageRef => $img_id});
 
 =head1 DESCRIPTION
 
