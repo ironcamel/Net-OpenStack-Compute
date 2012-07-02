@@ -1,5 +1,5 @@
 package Net::OpenStack::Compute::AuthRole;
-use Moo::Role;
+use Moose::Role;
 
 use JSON qw(from_json to_json);
 

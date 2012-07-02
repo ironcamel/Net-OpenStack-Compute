@@ -1,5 +1,8 @@
 Revision history for Net-OpenStack-Compute
 
+1.1002  2012-07-02
+        Tired of Moo breaking things. Switching to Moose.
+
 1.1001  2012-05-26
         Don't use an array ref with around, which Moo doesn't seem to like.
         Thanks Jonathan "Duke" Leto (https://github.com/leto).
