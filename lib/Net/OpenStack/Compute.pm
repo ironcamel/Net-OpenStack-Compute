@@ -16,7 +16,6 @@ has region       => (is => 'ro');
 has service_name => (is => 'ro');
 has is_rax_auth  => (is => 'ro');
 has verify_ssl   => (is => 'ro', default => sub {! $ENV{OSCOMPUTE_INSECURE}});
-has _auth_info   => (is => 'rw');
 
 has base_url => (
     is      => 'ro',
@@ -27,6 +26,18 @@ has token => (
     is      => 'ro',
     lazy    => 1,
     default => sub { shift->_auth_info->{token} },
+);
+has _auth_info => (is => 'ro', lazy => 1, builder => '_build_auth_info');
+
+has _agent => (
+    is => 'ro',
+    lazy => 1,
+    default => sub {
+        my $self = shift;
+        my $agent = LWP::UserAgent->new(
+            ssl_opts => { verify_hostname => $self->verify_ssl });
+        return $agent;
+    },
 );
 
 with 'Net::OpenStack::Compute::AuthRole';
@@ -59,20 +70,13 @@ sub BUILD {
     my $auth_url = $self->auth_url;
     $auth_url =~ s|/+$||;
     $self->auth_url($auth_url);
-    # Get authentication token
-    $self->_auth_info($self->get_auth_info());
 }
 
-sub _agent {
-    my $self = shift;
-    my $agent = LWP::UserAgent->new(
-        ssl_opts => { verify_hostname => $self->verify_ssl }
-    );
-    # Auth token header not needed for get_auth_info
-    if (defined($self->_auth_info)) {
-        $agent->default_header(x_auth_token => $self->_auth_info->{token});
-    }
-    return $agent;
+sub _build_auth_info {
+    my ($self) = @_;
+    my $auth_info = $self->get_auth_info();
+    $self->_agent->default_header(x_auth_token => $auth_info->{token});
+    return $auth_info;
 }
 
 sub _get_query {
@@ -209,12 +213,12 @@ sub _url {
 
 sub _get {
     my ($self, $url) = @_;
-    return $self->_agent()->get($url);
+    return $self->_agent->get($url);
 }
 
 sub _post {
     my ($self, $url, $data) = @_;
-    return $self->_agent()->post(
+    return $self->_agent->post(
         $self->_url($url),
         content_type => 'application/json',
         content      => to_json($data),
@@ -224,7 +228,7 @@ sub _post {
 sub _delete {
     my ($self, $url) = @_;
     my $req = HTTP::Request->new(DELETE => $url);
-    return $self->_agent()->request($req);
+    return $self->_agent->request($req);
 }
 
 sub _action {

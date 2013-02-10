@@ -27,7 +27,7 @@ sub get_auth_info {
 
 sub auth_basic {
     my ($self) = @_;
-    my $res = $self->_agent()->get($self->auth_url,
+    my $res = $self->_agent->get($self->auth_url,
         x_auth_user       => $self->user,
         x_auth_key        => $self->password,
         x_auth_project_id => $self->project_id,
@@ -67,7 +67,7 @@ sub auth_rax {
 
 sub _parse_catalog {
     my ($self, $auth_data) = @_;
-    my $res = $self->_agent()->post($self->auth_url . "/tokens",
+    my $res = $self->_agent->post($self->auth_url . "/tokens",
         content_type => 'application/json', content => to_json($auth_data));
     die $res->status_line . "\n" . $res->content unless $res->is_success;
     my $data = from_json($res->content);
