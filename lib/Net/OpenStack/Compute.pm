@@ -15,7 +15,7 @@ has project_id   => (is => 'ro');
 has region       => (is => 'ro');
 has service_name => (is => 'ro');
 has is_rax_auth  => (is => 'ro');
-has endpoint_type => (is => 'ro');
+has endpoint_type => (is => 'ro', default => 'publicURL');
 has verify_ssl   => (is => 'ro', default => sub {! $ENV{OSCOMPUTE_INSECURE}});
 
 has base_url => (
