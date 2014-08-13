@@ -160,6 +160,13 @@ sub set_password {
     return _check_res($res);
 }
 
+sub get_networks {
+    my ($self, %params) = @_;
+    my $q = _get_query(%params);
+    my $res = $self->_get($self->_url("/os-tenant-networks", $params{detail}, $q));
+    return from_json($res->content)->{networks};
+}
+
 sub get_images {
     my ($self, %params) = @_;
     my $q = _get_query(%params);
@@ -388,6 +395,12 @@ Returns a server hashref.
 
 Returns true on success.
 
+=head2 get_networks
+
+    get_networks($id)
+
+Returns a network list
+.
 =head2 get_image
 
     get_image($id)
