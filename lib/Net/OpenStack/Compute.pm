@@ -160,6 +160,16 @@ sub set_password {
     return _check_res($res);
 }
 
+sub get_vnc_console {
+    my ($self, $server, $type) = @_;
+    $type ||= "novnc";
+    croak "server id is required" unless $server;
+    my $res = $self->_action($server,
+        "os-getVNCConsole" => { type => $type });
+    _check_res($res);
+    return from_json($res->content)->{console};
+}
+
 sub get_networks {
     my ($self, %params) = @_;
     my $q = _get_query(%params);
@@ -394,6 +404,12 @@ Returns a server hashref.
     set_password($server_id, $new_password)
 
 Returns true on success.
+
+=head2 get_vnc_console
+
+    get_vnc_console($server_id[, $type=novnc])
+
+Returns a url to the server's VNC console
 
 =head2 get_networks
 
