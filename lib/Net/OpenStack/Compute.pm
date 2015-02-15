@@ -129,7 +129,6 @@ sub rebuild_server {
     croak "invalid data" unless $data and 'HASH' eq ref $data;
     croak "imageRef is required" unless $data->{imageRef};
     my $res = $self->_action($server, rebuild => $data);
-    _check_res($res);
     return from_json($res->content)->{server};
 }
 
@@ -139,7 +138,7 @@ sub resize_server {
     croak "invalid data" unless $data and 'HASH' eq ref $data;
     croak "flavorRef is required" unless $data->{flavorRef};
     my $res = $self->_action($server, resize => $data);
-    return _check_res($res);
+    return 1;
 }
 
 sub reboot_server {
@@ -148,7 +147,7 @@ sub reboot_server {
     croak "invalid data" unless $data and 'HASH' eq ref $data;
     croak "reboot type is required" unless $data->{type};
     my $res = $self->_action($server, reboot => $data);
-    return _check_res($res);
+    return 1;
 }
 
 sub set_password {
@@ -157,7 +156,7 @@ sub set_password {
     croak "password id is required" unless defined $password;
     my $res = $self->_action($server,
         changePassword => { adminPass => $password });
-    return _check_res($res);
+    return 1;
 }
 
 sub get_vnc_console {
@@ -166,14 +165,14 @@ sub get_vnc_console {
     croak "server id is required" unless $server;
     my $res = $self->_action($server,
         "os-getVNCConsole" => { type => $type });
-    _check_res($res);
     return from_json($res->content)->{console};
 }
 
 sub get_networks {
     my ($self, %params) = @_;
     my $q = _get_query(%params);
-    my $res = $self->_get($self->_url("/os-tenant-networks", $params{detail}, $q));
+    my $res = $self->_get(
+        $self->_url("/os-tenant-networks", $params{detail}, $q));
     return from_json($res->content)->{networks};
 }
 
@@ -197,7 +196,7 @@ sub create_image {
     croak "invalid data" unless $data and 'HASH' eq ref $data;
     croak "name is required" unless defined $data->{name};
     my $res = $self->_action($server, createImage => $data);
-    return _check_res($res);
+    return 1;
 }
 
 sub delete_image {
