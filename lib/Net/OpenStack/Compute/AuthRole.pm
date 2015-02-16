@@ -13,6 +13,7 @@ requires qw(
     is_rax_auth
     verify_ssl
     _agent
+    endpoint_type
 );
 
 sub get_auth_info {
@@ -81,12 +82,12 @@ sub _parse_catalog {
         die "No catalog found named " . $self->service_name unless @catalog;
     }
     my $catalog = $catalog[0];
-    my $base_url = $catalog->{endpoints}[0]{publicURL};
+    my $base_url = $catalog->{endpoints}[0]{$self->endpoint_type};
     if ($self->region) {
         for my $endpoint (@{ $catalog->{endpoints} }) {
             my $region = $endpoint->{region} or next;
             if ($region eq $self->region) {
-                $base_url = $endpoint->{publicURL};
+                $base_url = $endpoint->{$self->endpoint_type};
                 last;
             }
         }

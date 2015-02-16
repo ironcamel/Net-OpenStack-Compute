@@ -15,6 +15,7 @@ has project_id   => (is => 'ro');
 has region       => (is => 'ro');
 has service_name => (is => 'ro');
 has is_rax_auth  => (is => 'ro');
+has endpoint_type => (is => 'ro', default => 'publicURL');
 has verify_ssl   => (is => 'ro', default => sub {! $ENV{OSCOMPUTE_INSECURE}});
 
 has base_url => (
@@ -59,6 +60,7 @@ sub new_from_env {
         project_id   => $ENV{NOVA_PROJECT_ID}  || $ENV{OS_TENANT_NAME},
         region       => $ENV{NOVA_REGION_NAME} || $ENV{OS_AUTH_REGION},
         service_name => $ENV{NOVA_SERVICE_NAME},
+        endpoint_type => $ENV{OS_ENDPOINT_TYPE},
         is_rax_auth  => $ENV{NOVA_RAX_AUTH},
     );
     return Net::OpenStack::Compute->new(%env, %params);
